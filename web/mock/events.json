@@ -1,0 +1,366 @@
+[
+  {
+    "type": "session.state",
+    "runtime": "local",
+    "status": "connected",
+    "cwd": "C:/Users/ryan/projects/mark-ii",
+    "label": "Ryan's PC",
+    "v": 1,
+    "seq": 1,
+    "t_offset_ms": 0
+  },
+  {
+    "type": "fs.tree",
+    "root": "C:/Users/ryan/projects/mark-ii",
+    "nodes": [
+      {
+        "path": "C:/Users/ryan/projects/mark-ii/notes.md",
+        "dir": false,
+        "bytes": 0
+      },
+      {
+        "path": "C:/Users/ryan/projects/mark-ii/refs",
+        "dir": true,
+        "bytes": 0
+      },
+      {
+        "path": "C:/Users/ryan/projects/mark-ii/refs/sampling-2026.pdf",
+        "dir": false,
+        "bytes": 882104
+      },
+      {
+        "path": "C:/Users/ryan/projects/mark-ii/refs/flow-matching.pdf",
+        "dir": false,
+        "bytes": 614220
+      }
+    ],
+    "v": 1,
+    "seq": 2,
+    "t_offset_ms": 400
+  },
+  {
+    "type": "agent.thinking",
+    "tier": "watcher",
+    "model": "nvidia/Nemotron-3_5-Lightning",
+    "note": "Observing workspace",
+    "v": 1,
+    "seq": 3,
+    "t_offset_ms": 1600
+  },
+  {
+    "type": "usage",
+    "tier": "watcher",
+    "model": "nvidia/Nemotron-3_5-Lightning",
+    "prompt_tokens": 18400,
+    "completion_tokens": 95,
+    "cost_usd": 0.0011268,
+    "cumulative_cost_usd": 0.001127,
+    "v": 1,
+    "seq": 4,
+    "t_offset_ms": 1900
+  },
+  {
+    "type": "watcher.observation",
+    "id": "obs_1",
+    "confidence": 0.86,
+    "observation": "You've pulled two papers on diffusion sampling into refs/ and opened an empty notes.md.",
+    "suggestion": "Working on something secret, sir? I can pull the current literature and draft that summary.",
+    "dismissible": true,
+    "v": 1,
+    "seq": 5,
+    "t_offset_ms": 2400
+  },
+  {
+    "type": "agent.message",
+    "id": "m_1",
+    "role": "user",
+    "text": "go ahead. keep it to what's actually new since June.",
+    "streaming": false,
+    "done": true,
+    "v": 1,
+    "seq": 6,
+    "t_offset_ms": 5000
+  },
+  {
+    "type": "agent.thinking",
+    "tier": "planner",
+    "model": "nvidia/Nemotron-3-Ultra-550b-a55b",
+    "note": "Decomposing request",
+    "v": 1,
+    "seq": 7,
+    "t_offset_ms": 5300
+  },
+  {
+    "type": "usage",
+    "tier": "planner",
+    "model": "nvidia/Nemotron-3-Ultra-550b-a55b",
+    "prompt_tokens": 3200,
+    "completion_tokens": 640,
+    "cost_usd": 0.00512,
+    "cumulative_cost_usd": 0.006247,
+    "v": 1,
+    "seq": 8,
+    "t_offset_ms": 7100
+  },
+  {
+    "type": "agent.plan",
+    "id": "plan_1",
+    "steps": [
+      {
+        "id": "s1",
+        "title": "Search literature since June 2026",
+        "status": "running"
+      },
+      {
+        "id": "s2",
+        "title": "Read the two local papers",
+        "status": "pending"
+      },
+      {
+        "id": "s3",
+        "title": "Cross-reference and extract what's new",
+        "status": "pending"
+      },
+      {
+        "id": "s4",
+        "title": "Write summary to notes.md",
+        "status": "pending"
+      }
+    ],
+    "v": 1,
+    "seq": 9,
+    "t_offset_ms": 7300
+  },
+  {
+    "type": "agent.thinking",
+    "tier": "executor",
+    "model": "nvidia/nvidia-nemotron-3-nano-30b-a3b",
+    "note": "Calling tools",
+    "v": 1,
+    "seq": 10,
+    "t_offset_ms": 7700
+  },
+  {
+    "type": "tool.call",
+    "id": "tc_1",
+    "name": "tavily_search",
+    "args": {
+      "query": "diffusion sampling advances since June 2026",
+      "max_results": 6
+    },
+    "v": 1,
+    "seq": 11,
+    "t_offset_ms": 8000
+  },
+  {
+    "type": "usage",
+    "tier": "executor",
+    "model": "nvidia/nvidia-nemotron-3-nano-30b-a3b",
+    "prompt_tokens": 1900,
+    "completion_tokens": 180,
+    "cost_usd": 0.0001572,
+    "cumulative_cost_usd": 0.006404,
+    "v": 1,
+    "seq": 12,
+    "t_offset_ms": 8200
+  },
+  {
+    "type": "tool.result",
+    "id": "tc_1",
+    "ok": true,
+    "summary": "6 results",
+    "detail": "arxiv.org/abs/2608.11234 \u2014 Consistency-matched samplers\narxiv.org/abs/2609.00981 \u2014 Few-step flow inversion\n+4 more",
+    "v": 1,
+    "seq": 13,
+    "t_offset_ms": 9600
+  },
+  {
+    "type": "agent.step",
+    "plan_id": "plan_1",
+    "id": "s1",
+    "status": "done",
+    "v": 1,
+    "seq": 14,
+    "t_offset_ms": 9800
+  },
+  {
+    "type": "agent.step",
+    "plan_id": "plan_1",
+    "id": "s2",
+    "status": "running",
+    "v": 1,
+    "seq": 15,
+    "t_offset_ms": 9900
+  },
+  {
+    "type": "tool.call",
+    "id": "tc_2",
+    "name": "read_file",
+    "args": {
+      "path": "C:/Users/ryan/projects/mark-ii/refs/sampling-2026.pdf"
+    },
+    "v": 1,
+    "seq": 16,
+    "t_offset_ms": 10200
+  },
+  {
+    "type": "tool.result",
+    "id": "tc_2",
+    "ok": true,
+    "summary": "12 pages extracted",
+    "v": 1,
+    "seq": 17,
+    "t_offset_ms": 11100
+  },
+  {
+    "type": "usage",
+    "tier": "executor",
+    "model": "nvidia/nvidia-nemotron-3-nano-30b-a3b",
+    "prompt_tokens": 14200,
+    "completion_tokens": 420,
+    "cost_usd": 0.0009528,
+    "cumulative_cost_usd": 0.007357,
+    "v": 1,
+    "seq": 18,
+    "t_offset_ms": 11300
+  },
+  {
+    "type": "tool.call",
+    "id": "tc_3",
+    "name": "read_file",
+    "args": {
+      "path": "C:/Users/ryan/projects/mark-ii/refs/flow-matching.pdf"
+    },
+    "v": 1,
+    "seq": 19,
+    "t_offset_ms": 11600
+  },
+  {
+    "type": "tool.result",
+    "id": "tc_3",
+    "ok": true,
+    "summary": "9 pages extracted",
+    "v": 1,
+    "seq": 20,
+    "t_offset_ms": 12400
+  },
+  {
+    "type": "usage",
+    "tier": "executor",
+    "model": "nvidia/nvidia-nemotron-3-nano-30b-a3b",
+    "prompt_tokens": 11800,
+    "completion_tokens": 380,
+    "cost_usd": 0.0007992,
+    "cumulative_cost_usd": 0.008156,
+    "v": 1,
+    "seq": 21,
+    "t_offset_ms": 12600
+  },
+  {
+    "type": "agent.step",
+    "plan_id": "plan_1",
+    "id": "s2",
+    "status": "done",
+    "v": 1,
+    "seq": 22,
+    "t_offset_ms": 12800
+  },
+  {
+    "type": "agent.step",
+    "plan_id": "plan_1",
+    "id": "s3",
+    "status": "running",
+    "v": 1,
+    "seq": 23,
+    "t_offset_ms": 12900
+  },
+  {
+    "type": "agent.thinking",
+    "tier": "planner",
+    "model": "nvidia/Nemotron-3-Ultra-550b-a55b",
+    "note": "Cross-referencing 4 sources against local papers",
+    "v": 1,
+    "seq": 24,
+    "t_offset_ms": 13200
+  },
+  {
+    "type": "usage",
+    "tier": "planner",
+    "model": "nvidia/Nemotron-3-Ultra-550b-a55b",
+    "prompt_tokens": 38400,
+    "completion_tokens": 1850,
+    "cost_usd": 0.04395,
+    "cumulative_cost_usd": 0.052106,
+    "v": 1,
+    "seq": 25,
+    "t_offset_ms": 15800
+  },
+  {
+    "type": "agent.step",
+    "plan_id": "plan_1",
+    "id": "s3",
+    "status": "done",
+    "v": 1,
+    "seq": 26,
+    "t_offset_ms": 16000
+  },
+  {
+    "type": "agent.step",
+    "plan_id": "plan_1",
+    "id": "s4",
+    "status": "running",
+    "v": 1,
+    "seq": 27,
+    "t_offset_ms": 16100
+  },
+  {
+    "type": "tool.call",
+    "id": "tc_4",
+    "name": "write_file",
+    "args": {
+      "path": "C:/Users/ryan/projects/mark-ii/notes.md"
+    },
+    "v": 1,
+    "seq": 28,
+    "t_offset_ms": 16500
+  },
+  {
+    "type": "tool.result",
+    "id": "tc_4",
+    "ok": true,
+    "summary": "4.1 KB written",
+    "v": 1,
+    "seq": 29,
+    "t_offset_ms": 17100
+  },
+  {
+    "type": "artifact.write",
+    "path": "C:/Users/ryan/projects/mark-ii/notes.md",
+    "kind": "md",
+    "bytes": 4210,
+    "preview": "# Diffusion sampling \u2014 what changed since June 2026\n\nThree things actually moved. Everything else is noise.\n\n## 1. Consistency-matched samplers\nYour `sampling-2026.pdf` predates this. The June result you're\nbuilding on was superseded in August \u2014 see arXiv 2608.11234...",
+    "v": 1,
+    "seq": 30,
+    "t_offset_ms": 17300
+  },
+  {
+    "type": "agent.step",
+    "plan_id": "plan_1",
+    "id": "s4",
+    "status": "done",
+    "v": 1,
+    "seq": 31,
+    "t_offset_ms": 17450
+  },
+  {
+    "type": "agent.message",
+    "id": "m_2",
+    "role": "assistant",
+    "text": "Written to notes.md. One thing worth flagging: the June result your local paper builds on was superseded in August. I'd check that before you go further on the Mark II.",
+    "streaming": false,
+    "done": true,
+    "v": 1,
+    "seq": 32,
+    "t_offset_ms": 17950
+  }
+]
