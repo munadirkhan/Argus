@@ -1,4 +1,4 @@
-"""Base types for AURA tools. Owned by the core lane — do not edit in the web lane."""
+"""Base types for ARGUS tools. Owned by the core lane — do not edit in the web lane."""
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any

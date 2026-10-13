@@ -1,4 +1,4 @@
-# AURA Tool Contract v1 — FROZEN
+# ARGUS Tool Contract v1 — FROZEN
 
 How the agent loop (core lane) and the tools (web lane) stay decoupled.
 

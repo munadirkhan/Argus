@@ -1,6 +1,6 @@
-# Brief for Astra — AURA frontend
+# Brief for Astra — ARGUS frontend
 
-You own two things in a hackathon project called AURA: the **entire frontend**,
+You own two things in a hackathon project called ARGUS: the **entire frontend**,
 and the **tools layer** the agent uses to touch the real world.
 Read this whole brief before writing code.
 
@@ -31,7 +31,7 @@ Format and rules are in `docs/worklog/README.md`. Four lines, newest at top,
 append only, and never edit `CORE.md`. This is the only way the two lanes stay
 in sync — neither agent can see the other's session.
 
-## What AURA is
+## What ARGUS is
 
 An always-on AI agent that lives on your computer. It watches what you're
 working on and *proactively* offers to help — then does real work: searches the
@@ -40,6 +40,12 @@ finished document back to your disk.
 
 The emotional target is **Jarvis**. It notices you're building something and
 says "Working on something secret, sir?" — then goes and does the research.
+
+The name is from Argus Panoptes, the hundred-eyed giant of Greek myth who
+never slept — the all-seeing watchman. Let that inform the design: this is
+something that is always quietly watching and occasionally speaks. Calm and
+attentive, not busy or chattery. It should feel like it was awake the whole
+time, not like it just woke up when you typed.
 
 It runs on NVIDIA Nemotron models via Nebius Token Factory, in three tiers:
 - **Watcher** — Nemotron 3.5 Lightning. Always on, cheap, huge context.

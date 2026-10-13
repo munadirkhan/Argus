@@ -1,4 +1,4 @@
-# AURA Event Contract v1  — FROZEN
+# ARGUS Event Contract v1  — FROZEN
 
 Single source of truth between `core/` (backend) and `web/` (frontend).
 **Do not change without both owners agreeing.** Add new `type`s freely; never
