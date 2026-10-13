@@ -1,15 +1,35 @@
 # Brief for Astra — AURA frontend
 
-You are building the **entire frontend** for a hackathon project called AURA.
+You own two things in a hackathon project called AURA: the **entire frontend**,
+and the **tools layer** the agent uses to touch the real world.
 Read this whole brief before writing code.
 
 ## Hard boundaries (do not violate)
 
-- You work **only inside `web/`**. Never create or edit files outside `web/`.
-  Another agent owns `core/` and `docs/`. Touching them causes merge conflicts.
+You may create and edit files in exactly these places:
+
+- `web/` — everything. The whole frontend is yours.
+- `core/tools/` — every file **except** `base.py` and `registry.py`, which
+  another agent owns. Add new tool files freely; never edit those two.
+- `docs/worklog/WEB.md` — append your entries here.
+
+Never touch anything else. Another agent owns `core/` (agent loop, router,
+watcher, companion, server) and all of `docs/` except your worklog. Editing
+outside your lane is what causes merge conflicts.
+
 - Work on branch **`feat/web`**. Never commit to `main`.
-- `docs/EVENT_CONTRACT.md` is **frozen**. Build against it exactly. If you think
-  it needs a change, say so in the PR description — do not edit the file.
+- `docs/EVENT_CONTRACT.md` and `docs/TOOL_CONTRACT.md` are **frozen**. Build
+  against them exactly. If one needs a change, say so in the PR description —
+  do not edit the file.
+
+## Worklog — read and write this every session
+
+Before you start: read `docs/worklog/CORE.md` to see what the other lane did.
+Before you open a PR: append an entry to `docs/worklog/WEB.md`.
+
+Format and rules are in `docs/worklog/README.md`. Four lines, newest at top,
+append only, and never edit `CORE.md`. This is the only way the two lanes stay
+in sync — neither agent can see the other's session.
 
 ## What AURA is
 
@@ -108,8 +128,40 @@ loading states, and the moment before the agent speaks all matter.
 4. No console errors. Responsive down to 1280px (ignore mobile entirely).
 5. PR from `feat/web` → `main` with 2–4 screenshots in the description.
 
+---
+
+# Part 2 — the tools layer (`core/tools/`)
+
+Python. This is what gives the agent real-world reach: live web search, reading
+files off the user's actual disk, writing documents back. The agent loop calls
+these; you implement them.
+
+**Read `docs/TOOL_CONTRACT.md` first.** It is frozen and it is precise: one tool
+per file, subclass `Tool` from `core/tools/base.py`, export as `TOOL`, return a
+`ToolResult`, never raise. The registry auto-discovers your files — you do not
+register anything by hand.
+
+Build these six:
+
+| name | notes |
+|---|---|
+| `tavily_search` | Tavily API. **This is a $3,000 prize category — make it genuinely good, not a thin wrapper.** Handle rate limits, dedupe results, return clean citations in `meta`. |
+| `fetch_url` | Fetch a page, strip nav/ads/scripts, return readable text. |
+| `read_file` | Read local files. **Must handle PDFs** (`.pdf` → extracted text) — the demo reads two PDFs off disk. |
+| `write_file` | `dangerous = True`. Create parent dirs. Return bytes written. |
+| `list_dir` | Cap depth, skip `node_modules`/`.git`/`.venv`. |
+| `shell` | `dangerous = True`. 20s timeout, capture stdout+stderr together. |
+
+Verify your work with `python -m core.tools.registry` — it prints every tool it
+discovered. If yours isn't listed, it won't load for the agent either.
+
+Each tool gets its own test in `core/tools/tests/` proving it works against the
+real API or filesystem. These are the only tests in the project; they matter
+because the agent loop assumes tools are reliable.
+
 ## Do not build
 
 Auth. Settings. Dark/light toggle (dark only). Mobile layout. Onboarding.
-A landing page. Tests. Any backend, API route, or model call — if you find
-yourself writing a fetch to an LLM, you are out of scope.
+A landing page. Frontend tests. The agent loop, the model router, the watcher,
+the websocket server, or any call to an LLM — all of that belongs to the other
+lane. If you find yourself calling Nemotron, you are out of scope.
