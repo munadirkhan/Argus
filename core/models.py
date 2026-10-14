@@ -14,7 +14,7 @@ different regions (Nano/Lightning: eu-north1, Super/Ultra: us-central1), so a
 single base URL 404s on half the catalogue.
 """
 from __future__ import annotations
-import os, asyncio
+import os, asyncio, json
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
@@ -60,31 +60,84 @@ class Resolved:
     spec: ModelSpec
 
 
+class BudgetExceeded(RuntimeError):
+    """Raised instead of making a model call once the spend cap is reached."""
+
+
 @dataclass
 class Spend:
-    """Running cost, reported to the UI on every call."""
+    """Running cost, reported to the UI on every call.
+
+    When `path` is set, the ledger is persisted to disk after every call and
+    reloaded on startup, so the budget is a real cap across restarts rather
+    than one that quietly resets every time the server comes back up.
+    """
     total_usd: float = 0.0
     by_tier: dict[str, float] = field(default_factory=dict)
     calls: int = 0
+    path: str | None = None
 
     def add(self, tier: str, usd: float) -> float:
         self.total_usd += usd
         self.by_tier[tier] = self.by_tier.get(tier, 0.0) + usd
         self.calls += 1
+        self.save()
         return self.total_usd
+
+    def save(self) -> None:
+        if not self.path:
+            return
+        tmp = self.path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"total_usd": self.total_usd, "by_tier": self.by_tier,
+                       "calls": self.calls}, f)
+        os.replace(tmp, self.path)          # atomic: never leaves a torn ledger
+
+    @classmethod
+    def load(cls, path: str | None) -> "Spend":
+        if not path or not os.path.exists(path):
+            return cls(path=path)
+        try:
+            with open(path, encoding="utf-8") as f:
+                d = json.load(f)
+            return cls(total_usd=float(d.get("total_usd", 0.0)),
+                       by_tier=dict(d.get("by_tier", {})),
+                       calls=int(d.get("calls", 0)), path=path)
+        except (OSError, ValueError, TypeError):
+            # A corrupt ledger must fail CLOSED: assume the budget is spent
+            # rather than silently restarting the count at zero.
+            print("[router] spend ledger unreadable at %s; refusing to spend" % path)
+            return cls(total_usd=float("inf"), path=path)
+
+
+DEFAULT_BUDGET_USD = float(os.environ.get("ARGUS_BUDGET_USD", "10"))
 
 
 class ModelRouter:
-    """Owns per-region clients, tier resolution, and cost accounting."""
+    """Owns per-region clients, tier resolution, cost accounting, and the cap."""
 
     def __init__(self, api_key: str | None = None,
-                 client_factory: Callable[[str, str], Any] | None = None) -> None:
+                 client_factory: Callable[[str, str], Any] | None = None,
+                 budget_usd: float | None = None,
+                 ledger_path: str | None = None) -> None:
         self.api_key = api_key or os.environ.get("NEBIUS_API_KEY", "")
         self._client_factory = client_factory or self._default_client_factory
         self._clients: dict[str, Any] = {}
         self.resolved: dict[Tier, Resolved] = {}
-        self.spend = Spend()
+        self.budget_usd = DEFAULT_BUDGET_USD if budget_usd is None else budget_usd
+        self.spend = Spend.load(ledger_path)
         self.catalogue_ids: list[str] = []
+        self._warned = False
+
+    @property
+    def remaining_usd(self) -> float:
+        return max(0.0, self.budget_usd - self.spend.total_usd)
+
+    def check_budget(self) -> None:
+        if self.spend.total_usd >= self.budget_usd:
+            raise BudgetExceeded(
+                "Spend cap reached: $%.4f of $%.2f. Raise ARGUS_BUDGET_USD to continue."
+                % (self.spend.total_usd, self.budget_usd))
 
     def _default_client_factory(self, region: str, api_key: str) -> Any:
         from openai import AsyncOpenAI
@@ -149,6 +202,7 @@ class ModelRouter:
         Returns (message, usage_info) where usage_info carries the numbers the
         UI needs for the routing HUD and the cost meter.
         """
+        self.check_budget()                 # refuse BEFORE spending, never after
         r = self.for_tier(tier)
         kwargs: dict[str, Any] = {
             "model": r.model_id,
@@ -169,6 +223,10 @@ class ModelRouter:
         pout = getattr(u, "completion_tokens", 0) or 0
         cost = r.spec.cost(pin, pout)
         cumulative = self.spend.add(tier, cost)
+        if not self._warned and cumulative >= 0.8 * self.budget_usd:
+            self._warned = True
+            print("[router] WARNING: spent $%.4f of $%.2f budget"
+                  % (cumulative, self.budget_usd), flush=True)
 
         return resp.choices[0].message, {
             "tier": tier, "model": r.model_id, "family": r.family,

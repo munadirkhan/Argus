@@ -30,6 +30,10 @@ WATCH_INTERVAL = float(os.environ.get("ARGUS_WATCH_INTERVAL", "20"))
 WATCH_COOLDOWN = float(os.environ.get("ARGUS_WATCH_COOLDOWN", "120"))
 PORT = int(os.environ.get("PORT", "8787"))
 USE_FAKE = os.environ.get("ARGUS_FAKE", "").lower() in ("1", "true", "yes")
+LEDGER_PATH = os.environ.get(
+    "ARGUS_SPEND_FILE",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                 ".argus_spend.json"))
 
 
 class Session:
@@ -48,7 +52,8 @@ class Session:
             self.router = ModelRouter(api_key="fake",
                                       client_factory=FakeClient.factory(DEMO_SCRIPT))
         else:
-            self.router = ModelRouter()
+            # Real money: persist spend so the cap survives restarts.
+            self.router = ModelRouter(ledger_path=LEDGER_PATH)
 
         self.agent = Agent(self.router, self.registry, self.bus)
         self.watcher = Watcher(self.router, self.bus, self.root,
@@ -136,6 +141,8 @@ async def health() -> dict:
         "models": {t: session.router.for_tier(t).model_id
                    for t in ("watcher", "planner", "executor")},
         "spend_usd": round(session.router.spend.total_usd, 6),
+        "budget_usd": session.router.budget_usd,
+        "remaining_usd": round(session.router.remaining_usd, 6),
         "clients": session.bus.subscriber_count,
     }
 

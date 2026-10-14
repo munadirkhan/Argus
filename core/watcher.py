@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from . import events
 from .agent import extract_json
 from .bus import EventBus
-from .models import ModelRouter
+from .models import BudgetExceeded, ModelRouter
 from .prompts import WATCHER_SYSTEM
 
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", ".next",
@@ -141,6 +141,10 @@ class Watcher:
                 response_format={"type": "json_object"},
                 max_tokens=300, temperature=0.4,
             )
+        except BudgetExceeded as e:
+            self.enabled = False                # go quiet; do not retry every tick
+            await self.bus.emit(events.error("watcher paused: %s" % e, fatal=False))
+            return None
         except Exception as e:
             await self.bus.emit(events.error("watcher: %s" % e, fatal=False))
             return None

@@ -13,7 +13,7 @@ import json, itertools, re
 
 from . import events
 from .bus import EventBus
-from .models import ModelRouter
+from .models import BudgetExceeded, ModelRouter
 from .prompts import PLANNER_SYSTEM, EXECUTOR_SYSTEM, SYNTH_SYSTEM
 from .tools.registry import Registry
 
@@ -188,6 +188,9 @@ class Agent:
                     found = await self.execute_step(goal, step, findings)
                     findings.append("%s: %s" % (step["title"], found))
                     await self.bus.emit(events.agent_step(plan_id, step["id"], "done"))
+                except BudgetExceeded:
+                    await self.bus.emit(events.agent_step(plan_id, step["id"], "failed"))
+                    raise                       # stop the whole run, not just this step
                 except Exception as e:
                     await self.bus.emit(events.agent_step(plan_id, step["id"], "failed"))
                     await self.bus.emit(events.error(

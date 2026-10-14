@@ -10,3 +10,7 @@ dist/
 build/
 .DS_Store
 scripts/nebius_probe_results.json
+
+# Spend ledger (real money tracking; local only)
+.argus_spend.json
+.argus_spend.json.tmp
