@@ -36,7 +36,7 @@ offer, so the ObservationCard can be sized for that.
 (`core/server.py`). All three offline test suites pass with no API key.
 **Affects web:** The real server is runnable NOW without any key —
 `ARGUS_FAKE=1 python -m core.server` serves live contract events at
-`ws://localhost:8787/ws`. Point the live toggle at that instead of the mock
+`ws://localhost:7600/ws`. Point the live toggle at that instead of the mock
 replay once your components are up; it exercises the same code path the demo
 will. `GET /health` reports bound models, tools and spend.
 **Needs from web:** the six tools in `core/tools/`. The registry currently

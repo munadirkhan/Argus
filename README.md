@@ -32,7 +32,7 @@ tells you the one thing you didn't want to hear:
 
 | Stage | Model | Why this one |
 |---|---|---|
-| **Watcher** | Nemotron 3.5 Lightning | 1M context at $0.06/M input. Runs every 20s, holds the whole workspace, costs **$1.62 for an 8-hour day**. |
+| **Watcher** | Nemotron 3.5 Lightning | 1M context at $0.06/M input. Looks every 20s, but only calls the model when something changed. A look is ~1,000 tokens ($0.00007), so even a change every 20s for an **8-hour day is about $0.10**. |
 | **Planner** | Nemotron 3 Ultra 550B | The reasoning moment. Decomposes the request, then synthesises the finding. Used twice per task, never in the hot loop. |
 | **Executor** | Nemotron 3 Nano 30B | Fast, cheap, high-volume tool calling. Does the actual work. |
 
@@ -74,7 +74,7 @@ degrades to Super rather than crashing.
 |---|---|
 | Watcher decision (Lightning) | **0.8s**, spoke 3/3 on the demo scenario, stayed quiet on routine edits |
 | Full plan → execute → synthesise | **~2s, ~$0.001** |
-| Always-on watcher, 8-hour day | **~$1.62** |
+| Always-on watcher, 8-hour day | **~$0.10** worst case (a change every 20s); $0 while nothing changes |
 
 ### It can't spend your money by accident
 
@@ -116,7 +116,7 @@ cp .env.example .env                                 # add NEBIUS_API_KEY
 python -m core.server
 ```
 
-Open `http://localhost:8787/health` to see which models got bound.
+Open `http://localhost:7600/health` to see which models got bound.
 
 **With no API key at all**, the whole stack still runs against a scripted model:
 

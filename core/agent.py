@@ -21,6 +21,7 @@ from .tools._workspace import SKIP_DIRS, human_size
 WRITER_TOOLS = {"write_file", "read_file"}    # the writer writes; it does not research
 
 MAX_TOOL_ITERS = 6
+MAX_SEARCHES_PER_STEP = 2       # enforced in code: prompts alone did not hold it
 MAX_STEPS = 5
 MATERIAL_PER_TOOL = 5000      # chars of each tool output carried forward
 MATERIAL_PER_STEP = 18000
@@ -49,6 +50,82 @@ def list_files(root, limit=80):
             if len(out) >= limit:
                 return "\n".join(out + ["- ... (more files not shown)"])
     return "\n".join(out) or "- (empty)"
+
+
+_DOC_RE = re.compile(r"([\w\-./\\]+\.(?:md|markdown|txt))", re.I)
+
+
+def pick_target(step_title, goal, root):
+    """Which file the writing step should produce. Prefer a filename the plan
+    names that already exists (e.g. the empty notes.md), then any named one,
+    then an empty document sitting in the workspace."""
+    named = _DOC_RE.findall(step_title) + _DOC_RE.findall(goal)
+    for n in named:
+        if os.path.isfile(os.path.join(root, n)):
+            return n.replace("\\", "/")
+    if named:
+        return named[0].replace("\\", "/")
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+        for fn in filenames:
+            full = os.path.join(dirpath, fn)
+            if fn.lower().endswith((".md", ".txt")) and os.path.getsize(full) == 0:
+                return os.path.relpath(full, root).replace("\\", "/")
+    return "argus-notes.md"
+
+
+def brief(text, max_words=75):
+    """The spoken reply is a headline; the document holds the detail. Keep
+    whole sentences, cut at the first paragraph break past the limit."""
+    if len(text.split()) <= max_words:
+        return text
+    out, words = [], 0
+    for sent in re.split(r"(?<=[.!?])\s+", text.replace("\n\n", " \n\n ")):
+        if words and words + len(sent.split()) > max_words:
+            break
+        out.append(sent)
+        words += len(sent.split())
+    return " ".join(out).replace(" \n\n ", "\n\n").strip()
+
+
+def strip_fences(text):
+    """Unwrap a document the model put inside a single code fence."""
+    t = text.strip()
+    if t.startswith(_FENCE):
+        first = t.find("\n")
+        if first != -1 and t.endswith(_FENCE):
+            return t[first + 1:-len(_FENCE)].strip()
+    return t
+
+
+def self_facts(router):
+    """What ARGUS knows first-hand about the platform it runs on.
+
+    The router pulled Token Factory's live /v1/models at startup, and ARGUS is
+    calling these models right now. That is better evidence than any web page,
+    so it goes to the planner and writer as authoritative.
+    """
+    from .models import CATALOGUE
+    nemotron = [m for m in getattr(router, "catalogue_ids", []) if "nemotron" in m.lower()]
+    if not nemotron:
+        return ""
+    bound = {t: router.for_tier(t).model_id for t in ("watcher", "planner", "executor")}
+    prices = []
+    for fam in ("nano", "lightning", "super", "ultra"):
+        if any(fam in m.lower() for m in nemotron):
+            s = CATALOGUE[fam]
+            prices.append("%s $%.2f/$%.2f" % (fam.capitalize(), s.price_in, s.price_out))
+    return (
+        "What you know first-hand (read live from the Nebius Token Factory API at startup; "
+        "authoritative, and it outranks any web page):\n"
+        "- You are running on Nebius Token Factory right now. Your watcher is %s, your planner "
+        "and writer is %s, your executor is %s. All are generally available: you are using "
+        "them as you read this.\n"
+        "- NVIDIA Nemotron models in Token Factory's live catalogue: %s.\n"
+        "- Token Factory list prices per 1M tokens (input/output): %s.\n"
+        "If the user's notes or a web source contradict this, this wins. Say so plainly."
+        % (bound["watcher"], bound["planner"], bound["executor"],
+           ", ".join(nemotron), "; ".join(prices)))
 
 
 def _today():
@@ -115,7 +192,7 @@ class Agent:
             "planner",
             [{"role": "system", "content": PLANNER_SYSTEM.format(
                 tool_list=tool_list, workspace=self.workspace, today=_today(),
-                files=list_files(self.workspace))},
+                files=list_files(self.workspace), facts=self_facts(self.router))},
              {"role": "user", "content": goal}],
             response_format={"type": "json_object"},
             max_tokens=2000, temperature=0.3,
@@ -143,6 +220,43 @@ class Agent:
             {"id": st["id"], "title": st["title"], "status": "pending"} for st in steps]))
         return plan_id, steps
 
+    # --- the writing stage (Ultra writes, ARGUS saves) --------------------
+    async def write_document(self, goal, step, prior):
+        """Ultra writes the finished document as plain markdown; ARGUS saves it.
+
+        Deterministic on purpose. Asking a model to tuck a long document into a
+        JSON tool argument fails in three ways -- it forgets to call the tool,
+        it keeps "improving" into extra files, or the escaping breaks -- and
+        the document is the thing the user actually reads.
+        """
+        target = pick_target(step["title"], goal, self.workspace)
+        r = self.router.for_tier("planner")
+        await self.bus.emit(events.agent_thinking("planner", r.model_id, "Writing " + target))
+        context = ("\n\nMaterial gathered by earlier steps:\n\n" + "\n\n".join(prior)) if prior else ""
+        system = WRITER_SYSTEM.format(
+            step=step["title"], goal=goal, workspace=self.workspace, context=context,
+            today=_today(), files=list_files(self.workspace), facts=self_facts(self.router),
+            target=target)
+        msg, u = await self.router.complete(
+            "planner",
+            [{"role": "system", "content": system},
+             {"role": "user", "content": "Write the document now."}],
+            max_tokens=8000, temperature=0.4)
+        await self._emit_usage(u)
+        doc = strip_fences((getattr(msg, "content", "") or "").strip())
+        if len(doc) < 40:
+            raise RuntimeError("the writer returned no document")
+
+        call_id = self._nid("tc")
+        args = {"path": target, "content": doc}
+        await self.bus.emit(events.tool_call(call_id, "write_file", {"path": target}))
+        result = await self.registry.call("write_file", args)
+        await self.bus.emit(events.tool_result(call_id, result.ok, result.summary))
+        if not result.ok:
+            raise RuntimeError(result.summary)
+        await self._emit_artifact(args, result)
+        return result.summary, ""
+
     # --- stage 2: execute one step ----------------------------------------
     async def execute_step(self, goal, step, prior):
         """Run one step with tools. Returns (summary, material).
@@ -159,7 +273,7 @@ class Agent:
             context = "\n\nMaterial gathered by earlier steps:\n\n" + "\n\n".join(prior)
         system = (WRITER_SYSTEM if writing else EXECUTOR_SYSTEM).format(
             step=step["title"], goal=goal, workspace=self.workspace, context=context,
-            today=_today(), files=list_files(self.workspace))
+            today=_today(), files=list_files(self.workspace), facts=self_facts(self.router))
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": "Do this step now: " + step["title"]},
@@ -168,12 +282,16 @@ class Agent:
                    if not writing or s["function"]["name"] in WRITER_TOOLS]
         summary, material = "", []
         note = "Writing the document" if writing else "Calling tools"
+        searches = 0
         wrote = None
 
         for _ in range(MAX_TOOL_ITERS):
             await self.bus.emit(events.agent_thinking(tier, r.model_id, note))
             msg, u = await self.router.complete(
-                tier, messages, tools=schemas or None,
+                tier, messages,
+                tools=[s for s in schemas
+                       if not (searches >= MAX_SEARCHES_PER_STEP
+                               and s["function"]["name"] == "tavily_search")] or None,
                 max_tokens=8000 if writing else 1500)
             await self._emit_usage(u)
             messages.append(msg_to_dict(msg))
@@ -185,6 +303,8 @@ class Agent:
 
             for tc in tcs:
                 name = tc.function.name
+                if name == "tavily_search":
+                    searches += 1
                 try:
                     args = json.loads(tc.function.arguments or "{}")
                 except json.JSONDecodeError:
@@ -231,14 +351,15 @@ class Agent:
         joined = "\n\n".join("[%d] %s" % (i + 1, f) for i, f in enumerate(notes))
         msg, u = await self.router.complete(
             "planner",
-            [{"role": "system", "content": SYNTH_SYSTEM + "\n\nToday's date: " + _today()},
+            [{"role": "system", "content": SYNTH_SYSTEM + "\n\nToday's date: " + _today()
+              + "\n\n" + self_facts(self.router)},
              {"role": "user", "content":
               "The user asked: %s\n\nYour working notes from each step:\n%s\n\n"
               "Now write your reply to the user." % (goal, joined[:MATERIAL_FOR_SYNTH])}],
             max_tokens=500, temperature=0.6, thinking=False,
         )
         await self._emit_usage(u)
-        return (getattr(msg, "content", "") or "").strip() or "Done."
+        return brief((getattr(msg, "content", "") or "").strip()) or "Done."
 
     # --- the whole thing --------------------------------------------------
     async def run(self, goal, display=None):
@@ -254,7 +375,8 @@ class Agent:
             for step in steps:
                 await self.bus.emit(events.agent_step(plan_id, step["id"], "running"))
                 try:
-                    summary, mat = await self.execute_step(goal, step, material)
+                    runner = self.write_document if step.get("kind") == "write" else self.execute_step
+                    summary, mat = await runner(goal, step, material)
                     notes.append("%s: %s" % (step["title"], summary))
                     if mat:
                         material.append("## From step: %s\n%s" % (step["title"], mat))

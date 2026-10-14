@@ -96,6 +96,18 @@ Tool names: `read_file` `write_file` `list_dir` `shell` `tavily_search` `fetch_u
 { "type":"error", "message":"Sandbox timed out", "fatal":false }
 ```
 
+### `activity`   (additive, 2026-10-14)
+What the user is doing, as Argus sees it. Drives the "sight windows" in the UI.
+Today only simulated sessions emit app-level activity; live mode surfaces file
+changes via `fs.tree`.
+```json
+{ "type":"activity", "source":"terminal", "app":"Terminal", "title":"npm run dev",
+  "lines":[{"text":"TypeError: ...","tone":"err"}], "focus":true }
+```
+`source`: `market` | `browser` | `editor` | `terminal` | `files` ·
+`tone`: `dim` | `ok` | `warn` | `err` | `hl` | `code` · optional `market`,
+`url`, `startLine`, `errorLine`.
+
 ---
 
 ## Client → Server
@@ -103,4 +115,5 @@ Tool names: `read_file` `write_file` `list_dir` `shell` `tavily_search` `fetch_u
 ```json
 { "type":"user.message", "text":"summarize what I'm working on" }
 { "type":"user.dismiss", "id":"obs_7" }
+{ "type":"user.accept", "id":"obs_7" }   // run what the watcher offered (additive)
 ```

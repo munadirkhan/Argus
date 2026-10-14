@@ -4,10 +4,10 @@ Serves the event contract at ws://host/ws. One Session owns the bus, router,
 registry, agent and watcher; every connected client sees the same stream, which
 is what lets you open the UI on a second screen during a demo.
 
-Run:  python -m core.server            (or: uvicorn core.server:app --port 8787)
+Run:  python -m core.server            (or: uvicorn core.server:app --port 7600)
 """
 from __future__ import annotations
-import asyncio, json, os, sys
+import asyncio, json, os, sys, time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +17,7 @@ from .agent import Agent
 from .bus import EventBus
 from .models import ModelRouter
 from .tools.registry import Registry
-from .watcher import Watcher
+from .watcher import Watcher, scan
 
 try:
     from dotenv import load_dotenv
@@ -28,7 +28,7 @@ except ImportError:
 WATCH_ROOT = os.environ.get("ARGUS_WATCH_ROOT", os.getcwd())
 WATCH_INTERVAL = float(os.environ.get("ARGUS_WATCH_INTERVAL", "20"))
 WATCH_COOLDOWN = float(os.environ.get("ARGUS_WATCH_COOLDOWN", "120"))
-PORT = int(os.environ.get("PORT", "8787"))
+PORT = int(os.environ.get("PORT", "7600"))
 USE_FAKE = os.environ.get("ARGUS_FAKE", "").lower() in ("1", "true", "yes")
 LEDGER_PATH = os.environ.get(
     "ARGUS_SPEND_FILE",
@@ -93,11 +93,16 @@ class Session:
                 self.watcher.dismiss(obs_id)
         elif kind == "user.accept":
             obs_id = str(msg.get("id", ""))
-            pending = self.watcher.pending.pop(obs_id, None)
+            # Accept works even after a dismiss: the user is allowed to change
+            # their mind, and an accept must never silently do nothing.
+            pending = self.watcher.pending.pop(obs_id, None) or self.watcher.seen.get(obs_id)
             if pending:
                 goal = ("You noticed: %s\nYou offered: %s\nThe user said yes -- do it."
                         % (pending["observation"], pending["suggestion"]))
                 asyncio.create_task(self._run_agent(goal, display="Go ahead."))
+            else:
+                await self.bus.emit(events.error(
+                    "Couldn't find observation %r to act on." % obs_id, fatal=False))
         else:
             await self.bus.emit(events.error("unknown client message: %r" % kind))
 
@@ -115,6 +120,11 @@ class Session:
                 await self.bus.emit(events.error(
                     "%s: %s" % (type(e).__name__, e), fatal=False))
             finally:
+                # Re-baseline: what ARGUS just wrote is not the user's activity,
+                # and the watcher must not comment on its own work.
+                self.watcher.previous = scan(self.watcher.root)
+                self.watcher.last_spoke_at = time.time()
+                await self.watcher.emit_tree(self.watcher.previous)
                 self.watcher.enabled = was_enabled
 
 
@@ -150,6 +160,22 @@ async def health() -> dict:
         "remaining_usd": round(session.router.remaining_usd, 6),
         "clients": session.bus.subscriber_count,
     }
+
+
+@app.get("/artifact")
+async def artifact(path: str) -> dict:
+    """Full text of a file the agent wrote, for the UI's document viewer.
+    Same confinement as the file tools: nothing outside the workspace."""
+    from .tools._workspace import OutsideWorkspace, resolve
+    try:
+        full = resolve(path)
+    except OutsideWorkspace as e:
+        return {"ok": False, "error": str(e)}
+    if not os.path.isfile(full):
+        return {"ok": False, "error": "not found"}
+    with open(full, encoding="utf-8", errors="replace") as f:
+        text = f.read(400_000)
+    return {"ok": True, "path": full.replace("\\", "/"), "text": text}
 
 
 @app.websocket("/ws")

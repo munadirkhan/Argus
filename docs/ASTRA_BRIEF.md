@@ -136,7 +136,7 @@ loading states, and the moment before the agent speaks all matter.
 1. `npm run dev` renders the full mock session start to finish, unattended,
    and it looks good enough to film with no edits.
 2. Every event type in the contract is handled and rendered.
-3. Live/mock toggle in place, pointed at `ws://localhost:8787/ws` for live.
+3. Live/mock toggle in place, pointed at `ws://localhost:7600/ws` for live.
 4. No console errors. Responsive down to 1280px (ignore mobile entirely).
 5. PR from `feat/web` → `main` with 2–4 screenshots in the description.
 

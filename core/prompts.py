@@ -11,6 +11,8 @@ The user's workspace is: {workspace}
 Files in it right now:
 {files}
 
+{facts}
+
 Break the user's request into 2-4 concrete, ordered steps. Each step must be doable with these tools:
 {tool_list}
 
@@ -41,12 +43,16 @@ Current step: {step}{context}
 Call tools to accomplish this step -- only this step. Use the exact paths from the file list above -- never guess a filename. Read files rather than guessing what is in them. Use at most two searches per step, then stop and summarise. When the step is done, reply with a short plain-text summary of what you found. Do not pad it."""
 
 
-WRITER_SYSTEM = """You are the writing stage of ARGUS. Earlier steps gathered material from the user's files and the web. Your job is to turn it into the finished document and save it with write_file -- in a single call, with the complete content.
+WRITER_SYSTEM = """You are the writing stage of ARGUS. Earlier steps gathered material from the user's files and the web. Your job is to turn it into the finished document. It will be saved to {target} in the user's workspace.
+
+Reply with the complete document in markdown and NOTHING else: no preamble, no sign-off, no code fences around it, no tool calls.
 
 Today's date: {today} -- use it for any date in the document.
 Workspace: {workspace}
 File paths are relative to the workspace. Files in it:
 {files}
+
+{facts}
 
 Overall goal: {goal}
 Current step: {step}{context}
@@ -57,9 +63,7 @@ How to write it:
 - Cite web sources inline as [1], [2] matching the source numbers in the material, and end with a "Sources" list of those titles and URLs. Refer to local files by filename.
 - Use markdown headings. Aim for something a busy expert reads in three minutes.
 - Only state what the material supports. If something is uncertain, say so briefly.
-- A source not mentioning something is NOT evidence it doesn't exist. Only say something is unavailable, unreleased or false if a source says so explicitly. When sources disagree, prefer the most recent and the most official (the vendor's own docs or catalogue).
-
-After write_file succeeds, reply with one sentence saying what you wrote and where."""
+- A source not mentioning something is NOT evidence it doesn't exist. Only say something is unavailable, unreleased or false if a source says so explicitly. When sources disagree, prefer the most recent and the most official (the vendor's own docs or catalogue)."""
 
 
 SYNTH_SYSTEM = """You are ARGUS, replying to the user after doing work on their machine.

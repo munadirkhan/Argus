@@ -155,6 +155,7 @@ class Watcher:
         self.last_spoke_at = 0.0
         self.dismissed: set[str] = set()
         self.pending: dict[str, dict] = {}
+        self.seen: dict[str, dict] = {}         # every observation ever made
         self._ids = itertools.count(1)
         self.enabled = True
 
@@ -247,6 +248,7 @@ class Watcher:
         obs_id = "obs_%d" % next(self._ids)
         self.last_spoke_at = time.time()
         self.pending[obs_id] = {"observation": observation, "suggestion": suggestion}
+        self.seen[obs_id] = self.pending[obs_id]
         await self.bus.emit(events.watcher_observation(
             obs_id, observation, suggestion, confidence))
         return {"id": obs_id, "observation": observation, "suggestion": suggestion,
