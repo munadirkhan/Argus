@@ -14,6 +14,7 @@ os.makedirs(os.path.join(TMP, "refs"), exist_ok=True)
 open(os.path.join(TMP, "refs", "sampling-2026.pdf"), "w").write("x" * 500)
 
 os.environ["ARGUS_FAKE"] = "1"
+os.environ["TAVILY_API_KEY"] = ""        # hermetic: real tools, no network
 os.environ["ARGUS_WATCH_ROOT"] = TMP
 os.environ["ARGUS_WATCH_INTERVAL"] = "1"
 os.environ["ARGUS_WATCH_COOLDOWN"] = "0"

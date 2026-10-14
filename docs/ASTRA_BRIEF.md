@@ -1,3 +1,9 @@
+> **UPDATE 2026-10-14 — READ FIRST.** The core lane has already built **all six tools**
+> (`core/tools/`) and is building the **first version of the UI** locally. Do NOT rebuild
+> either. Read `docs/worklog/CORE.md` for the current state; your job will be to expand
+> and polish the UI once it lands on `main`. Everything below is the original brief, kept
+> for the design direction and boundaries.
+
 # Brief for Astra — ARGUS frontend
 
 You own two things in a hackathon project called ARGUS: the **entire frontend**,

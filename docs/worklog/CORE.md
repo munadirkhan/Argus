@@ -2,6 +2,19 @@
 <!-- Written ONLY by the core lane (agent loop, router, watcher, companion, server). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-14 (later) — core
+**Did:** Built all six tools in `core/tools/` (tavily_search, fetch_url, read_file w/ PDF,
+write_file, list_dir, shell). File tools are confined to the workspace; shell is off unless
+`ARGUS_ALLOW_SHELL=1`. Agent now carries real tool output between steps and Ultra writes the
+final document. Full demo runs live end to end (`scripts/live_demo.py`, demo workspace from
+`scripts/seed_demo.py`).
+**Affects web:** `artifact.write.path` is now absolute; `preview` up to 4000 chars.
+Accepting an observation is `{"type":"user.accept","id":"obs_N"}` (new client message).
+**Needs from web:** nothing — UI v1 is being built in the core lane. Do not start UI work
+until it lands on main.
+**Watch out:** do not rebuild the tools. Known issue: the watcher's offer is sometimes weak
+("fill in notes.md") and the run then skips the web check — prompt tuning, in progress.
+
 ### 2026-10-14 — core
 **Did:** Went live on Nebius. All 4 Nemotron models confirmed, all do native
 tool calling. Added per-tier reasoning switch (thinking OFF for watcher and

@@ -74,6 +74,41 @@ def rel(path: str, root: str | None) -> str:
         return path.replace("\\", "/")
 
 
+PEEK_FILES = 4
+PEEK_CHARS = 700
+PEEK_MAX_BYTES = 5_000_000
+TEXT_EXTS = {".md", ".txt", ".py", ".js", ".ts", ".tsx", ".json", ".csv", ".yaml",
+             ".yml", ".toml", ".html", ".tex", ".rst", ".ipynb"}
+
+
+def peek(path: str) -> str | None:
+    """First few hundred characters of a file, so the watcher knows what it is
+    looking at -- dated notes full of open questions read very differently
+    from a fresh blank page. None means 'not something we can peek into'."""
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return None
+    if size == 0:
+        return ""
+    if size > PEEK_MAX_BYTES:
+        return None
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        if ext == ".pdf":
+            from pypdf import PdfReader
+            pages = PdfReader(path).pages
+            text = (pages[0].extract_text() or "") if len(pages) else ""
+        elif ext in TEXT_EXTS:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                text = f.read(PEEK_CHARS * 2)
+        else:
+            return None
+    except Exception:
+        return None
+    return " ".join(text.split())[:PEEK_CHARS]
+
+
 def human_size(n: int) -> str:
     if n == 0:
         return "empty"
@@ -164,8 +199,15 @@ class Watcher:
         inventory = "\n".join(
             "- %s (%s)" % (rel(p, self.root), human_size(sz))
             for p, sz in sorted(sizes.items())[:60])
-        user = ("Workspace: %s\n\nRecent changes:\n%s\n\nCurrent files:\n%s"
-                % (self.root, summary or "(none)", inventory))
+        peeks = []
+        for p in (added + modified)[:PEEK_FILES]:
+            excerpt = peek(p)
+            if excerpt is not None:
+                peeks.append("--- %s ---\n%s" % (rel(p, self.root), excerpt or "(empty)"))
+        user = ("Today: %s\nWorkspace: %s\n\nRecent changes:\n%s\n\nCurrent files:\n%s"
+                % (time.strftime("%Y-%m-%d"), self.root, summary or "(none)", inventory))
+        if peeks:
+            user += "\n\nOpening lines of the new or changed files:\n" + "\n\n".join(peeks)
 
         try:
             msg, u = await self.router.complete(

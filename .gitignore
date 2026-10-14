@@ -15,3 +15,4 @@ scripts/nebius_probe_results.json
 .argus_spend.json
 .argus_spend.json.tmp
 scripts/probe_reasoning_results.json
+scripts/last_run.jsonl

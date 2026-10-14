@@ -55,7 +55,10 @@ class Session:
             # Real money: persist spend so the cap survives restarts.
             self.router = ModelRouter(ledger_path=LEDGER_PATH)
 
-        self.agent = Agent(self.router, self.registry, self.bus)
+        # Tools read their confinement root from the environment; make it the
+        # exact folder the watcher observes.
+        os.environ["ARGUS_WATCH_ROOT"] = self.root
+        self.agent = Agent(self.router, self.registry, self.bus, workspace=self.root)
         self.watcher = Watcher(self.router, self.bus, self.root,
                                interval=WATCH_INTERVAL, cooldown=WATCH_COOLDOWN)
         self._agent_lock = asyncio.Lock()
@@ -92,11 +95,13 @@ class Session:
             obs_id = str(msg.get("id", ""))
             pending = self.watcher.pending.pop(obs_id, None)
             if pending:
-                asyncio.create_task(self._run_agent(pending["suggestion"]))
+                goal = ("You noticed: %s\nYou offered: %s\nThe user said yes -- do it."
+                        % (pending["observation"], pending["suggestion"]))
+                asyncio.create_task(self._run_agent(goal, display="Go ahead."))
         else:
             await self.bus.emit(events.error("unknown client message: %r" % kind))
 
-    async def _run_agent(self, text: str) -> None:
+    async def _run_agent(self, text: str, display: str | None = None) -> None:
         if self._agent_lock.locked():
             await self.bus.emit(events.error(
                 "Still working on the previous request.", fatal=False))
@@ -105,7 +110,7 @@ class Session:
             was_enabled = self.watcher.enabled
             self.watcher.enabled = False          # do not interrupt itself
             try:
-                await self.agent.run(text)
+                await self.agent.run(text, display=display)
             except Exception as e:
                 await self.bus.emit(events.error(
                     "%s: %s" % (type(e).__name__, e), fatal=False))
