@@ -64,12 +64,43 @@ def scan(root: str) -> Snapshot:
     return Snapshot(time.time(), files)
 
 
-def describe_changes(added, modified, removed, limit: int = 12) -> str:
-    """Plain-text change summary for the model."""
+def rel(path: str, root: str | None) -> str:
+    """relpath that never raises: on Windows it fails across drives."""
+    if not root:
+        return os.path.basename(path)
+    try:
+        return os.path.relpath(path, root).replace("\\", "/")
+    except ValueError:
+        return path.replace("\\", "/")
+
+
+def human_size(n: int) -> str:
+    if n == 0:
+        return "empty"
+    if n < 1024:
+        return "%d bytes" % n
+    if n < 1024 * 1024:
+        return "%.0f KB" % (n / 1024)
+    return "%.1f MB" % (n / (1024 * 1024))
+
+
+def describe_changes(added, modified, removed, limit: int = 12,
+                     root: str | None = None, sizes: dict | None = None) -> str:
+    """Plain-text change summary for the model.
+
+    Sizes matter: "notes.md (empty)" next to two new PDFs is the signal that
+    someone is about to write something, and filenames alone hide it.
+    """
+    def name(p: str) -> str:
+        shown = rel(p, root)
+        if sizes and p in sizes:
+            shown += " (%s)" % human_size(sizes[p])
+        return shown
+
     parts = []
     for label, paths in (("added", added), ("modified", modified), ("removed", removed)):
         if paths:
-            shown = [os.path.basename(p) for p in paths[:limit]]
+            shown = [name(p) for p in paths[:limit]]
             more = "" if len(paths) <= limit else " (+%d more)" % (len(paths) - limit)
             parts.append("%s: %s%s" % (label, ", ".join(shown), more))
     return "\n".join(parts)
@@ -127,9 +158,12 @@ class Watcher:
         r = self.router.for_tier("watcher")
         await self.bus.emit(events.agent_thinking("watcher", r.model_id, "Observing workspace"))
 
-        summary = describe_changes(added, modified, removed)
-        inventory = "\n".join("- " + os.path.relpath(p, self.root).replace("\\", "/")
-                              for p in sorted(self.previous.files)[:60])
+        files = self.previous.files if self.previous else {}
+        sizes = {p: sz for p, (_mt, sz) in files.items()}
+        summary = describe_changes(added, modified, removed, root=self.root, sizes=sizes)
+        inventory = "\n".join(
+            "- %s (%s)" % (rel(p, self.root), human_size(sz))
+            for p, sz in sorted(sizes.items())[:60])
         user = ("Workspace: %s\n\nRecent changes:\n%s\n\nCurrent files:\n%s"
                 % (self.root, summary or "(none)", inventory))
 

@@ -2,6 +2,21 @@
 <!-- Written ONLY by the core lane (agent loop, router, watcher, companion, server). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-14 — core
+**Did:** Went live on Nebius. All 4 Nemotron models confirmed, all do native
+tool calling. Added per-tier reasoning switch (thinking OFF for watcher and
+executor, ON for planner) and a persistent hard spend cap (`ARGUS_BUDGET_USD`,
+default $10). Watcher now speaks 3/3 on the demo scenario in ~0.8s live.
+**Affects web:** `usage` events from the planner now carry more completion
+tokens (Ultra's reasoning is billed). Budget exhaustion arrives as a normal
+`error` event ("Spend cap reached...") — please render it calmly, not as a
+crash. Watcher observations are now one short sentence + a "Want me to...?"
+offer, so the ObservationCard can be sized for that.
+**Needs from web:** still the tools. `tavily_search`, `read_file` (with PDF),
+`write_file` are now the critical path — the model side is proven.
+**Watch out:** all Nemotron models are served in us-central1; ignore the old
+"different regions" note. Never commit `.env` or `.argus_spend.json`.
+
 ### 2026-10-14 01:05 — core
 **Did:** Built the whole backend. Router (`core/models.py`), agent loop
 (`core/agent.py`), watcher (`core/watcher.py`), websocket server

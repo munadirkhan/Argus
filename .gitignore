@@ -14,3 +14,4 @@ scripts/nebius_probe_results.json
 # Spend ledger (real money tracking; local only)
 .argus_spend.json
 .argus_spend.json.tmp
+scripts/probe_reasoning_results.json

@@ -43,15 +43,46 @@ the product feel intelligent. The routing is forced by the shape of the problem.
 A complete task — observation, two Ultra calls, six tool calls, the artifact —
 costs about **$0.05**.
 
+### Reasoning is switched per tier — measured, not guessed
+
+Every Nemotron 3 model reasons by default. That's exactly what you want from the
+planner and exactly what you don't want in an always-on loop. We probed all four
+models live (`scripts/probe_reasoning.py`) on the watcher's real JSON task:
+
+| Model | Thinking on (default) | Thinking off |
+|---|---|---|
+| Lightning | **broken** — reasoning spills into the answer, invalid JSON, 600 tokens, 2.8s | valid JSON, **25 tokens, 0.8s** |
+| Nano | valid, 199 tokens, 2.0s | valid, 27 tokens, 0.7s |
+| Ultra | valid, reasoning kept in a separate field, 156 tokens | valid, 22 tokens, 0.3s |
+
+So ARGUS sends `chat_template_kwargs: {enable_thinking: false}` to the watcher
+and executor, and lets Ultra think. Deep reasoning where it pays; none on the
+hot path.
+
 ### Model IDs are resolved, not hardcoded
 
-Published sources disagree on the casing of Nemotron IDs, and the tiers live in
-different Token Factory regions (Nano and Lightning in `eu-north1`, Super and
-Ultra in `us-central1`), so one base URL 404s on half the catalogue.
+The live catalogue doesn't match the published IDs: Nebius's own cookbook says
+`nvidia/nvidia-nemotron-3-nano-30b-a3b`, the API serves
+`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`. `core/models.py` queries `/v1/models`
+at startup and binds each tier to the best family actually available,
+case-insensitively, with an explicit fallback chain. If Ultra is unavailable it
+degrades to Super rather than crashing.
 
-`core/models.py` queries `/v1/models` in both regions at startup and binds each
-tier to the best family actually available, with an explicit fallback chain. If
-Ultra is unavailable it degrades to Super rather than crashing.
+### Measured live
+
+| | |
+|---|---|
+| Watcher decision (Lightning) | **0.8s**, spoke 3/3 on the demo scenario, stayed quiet on routine edits |
+| Full plan → execute → synthesise | **~2s, ~$0.001** |
+| Always-on watcher, 8-hour day | **~$1.62** |
+
+### It can't spend your money by accident
+
+Token Factory bills your card once the account balance is used up and has no
+server-side spending cap, so ARGUS enforces one. Every model call is refused
+*before it is sent* once spend reaches `ARGUS_BUDGET_USD` (default $10). The
+ledger is persisted atomically, so restarts don't reset it, and a corrupt ledger
+fails closed. This matters most for the hosted demo, which runs on a real key.
 
 ## Architecture
 
@@ -101,7 +132,11 @@ No API key or network needed for any of these:
 python scripts/test_agent_offline.py      # plan/execute/synthesise, tool dispatch
 python scripts/test_watcher_offline.py    # diffing, restraint, cooldown, cost
 python scripts/test_server_offline.py     # websocket contract end to end
-python scripts/verify_nebius.py           # probes the live API (needs a key)
+python scripts/test_budget_offline.py     # the spend cap holds
+
+python scripts/verify_nebius.py           # live: models, tool calling (needs a key)
+python scripts/probe_reasoning.py         # live: thinking on/off per model
+python scripts/live_smoke.py              # live: watcher + full agent loop
 ```
 
 ### Configuration
@@ -114,6 +149,8 @@ python scripts/verify_nebius.py           # probes the live API (needs a key)
 | `ARGUS_WATCH_INTERVAL` | 20 | Seconds between scans |
 | `ARGUS_WATCH_COOLDOWN` | 120 | Minimum seconds between interruptions |
 | `ARGUS_FAKE` | — | `1` to run with the scripted model |
+| `ARGUS_BUDGET_USD` | 10 | Hard spend cap, enforced before every call |
+| `ARGUS_SPEND_FILE` | `.argus_spend.json` | Persistent spend ledger |
 
 ## License
 

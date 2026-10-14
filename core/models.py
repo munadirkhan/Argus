@@ -8,10 +8,17 @@ forces it:
   planner  -> Nemotron 3 Ultra 550B   the reasoning moment, used rarely
   executor -> Nemotron 3 Nano 30B     fast, high-volume tool calls
 
-Model IDs are RESOLVED AT STARTUP against each region's /v1/models rather than
-hardcoded -- published sources disagree on casing, and the tiers live in
-different regions (Nano/Lightning: eu-north1, Super/Ultra: us-central1), so a
-single base URL 404s on half the catalogue.
+Model IDs are RESOLVED AT STARTUP against the live /v1/models rather than
+hardcoded. Published IDs disagree with the live catalogue on casing -- Nebius's
+own cookbook says `nvidia/nvidia-nemotron-3-nano-30b-a3b`, the API serves
+`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` -- so matching is case-insensitive.
+
+Reasoning is switched PER TIER (probed live, see scripts/probe_reasoning.py).
+All Nemotron 3 models think by default. That is what the planner is for, and
+Ultra keeps its reasoning in a separate field so the answer stays clean. On the
+hot path it is pure cost: Lightning with thinking on spills its reasoning into
+the answer and breaks JSON (600 tokens, 2.8s); with it off it returns valid
+JSON in 25 tokens and 0.8s.
 """
 from __future__ import annotations
 import os, asyncio, json
@@ -38,8 +45,9 @@ class ModelSpec:
 
 
 CATALOGUE: dict[str, ModelSpec] = {
-    "lightning": ModelSpec("lightning", "eu", 0.06, 0.24, "nvidia/Nemotron-3_5-Lightning"),
-    "nano":      ModelSpec("nano",      "eu", 0.06, 0.24, "nvidia/nvidia-nemotron-3-nano-30b-a3b"),
+    # All four verified live in us-central1 (2026-10-14).
+    "lightning": ModelSpec("lightning", "us", 0.06, 0.24, "nvidia/Nemotron-3_5-Lightning"),
+    "nano":      ModelSpec("nano",      "us", 0.06, 0.24, "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"),
     "super":     ModelSpec("super",     "us", 0.30, 0.90, "nvidia/nemotron-3-super-120b-a12b"),
     "ultra":     ModelSpec("ultra",     "us", 1.00, 3.00, "nvidia/Nemotron-3-Ultra-550b-a55b"),
 }
@@ -49,6 +57,15 @@ TIER_PREFERENCE: dict[Tier, tuple[str, ...]] = {
     "planner":  ("ultra", "super", "nano"),
     "executor": ("nano", "lightning", "super"),
 }
+
+# Reasoning on only where it earns its tokens.
+TIER_THINKING: dict[Tier, bool] = {
+    "watcher":  False,      # Lightning breaks JSON with thinking on
+    "planner":  True,       # the reasoning moment
+    "executor": False,      # fast tool calls; the plan is already made
+}
+
+_NO_THINK = {"chat_template_kwargs": {"enable_thinking": False}}
 
 
 @dataclass
@@ -196,7 +213,8 @@ class ModelRouter:
                        tools: list[dict] | None = None,
                        max_tokens: int = 2048,
                        temperature: float = 0.6,
-                       response_format: dict | None = None) -> tuple[Any, dict[str, Any]]:
+                       response_format: dict | None = None,
+                       thinking: bool | None = None) -> tuple[Any, dict[str, Any]]:
         """Call the model bound to `tier`.
 
         Returns (message, usage_info) where usage_info carries the numbers the
@@ -215,6 +233,9 @@ class ModelRouter:
             kwargs["tool_choice"] = "auto"
         if response_format:
             kwargs["response_format"] = response_format
+        think = TIER_THINKING[tier] if thinking is None else thinking
+        if not think:
+            kwargs["extra_body"] = _NO_THINK
 
         resp = await self.client(r.region).chat.completions.create(**kwargs)
 
@@ -228,10 +249,15 @@ class ModelRouter:
             print("[router] WARNING: spent $%.4f of $%.2f budget"
                   % (cumulative, self.budget_usd), flush=True)
 
-        return resp.choices[0].message, {
+        msg = resp.choices[0].message
+        reasoning = (getattr(msg, "reasoning_content", None)
+                     or getattr(msg, "reasoning", None) or "")
+        return msg, {
             "tier": tier, "model": r.model_id, "family": r.family,
             "prompt_tokens": pin, "completion_tokens": pout,
             "cost_usd": cost, "cumulative_cost_usd": cumulative,
+            "thinking": think, "reasoning_chars": len(reasoning),
+            "finish_reason": getattr(resp.choices[0], "finish_reason", None),
         }
 
     def describe(self) -> str:

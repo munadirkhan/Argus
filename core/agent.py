@@ -82,7 +82,7 @@ class Agent:
             [{"role": "system", "content": PLANNER_SYSTEM.format(tool_list=tool_list)},
              {"role": "user", "content": goal}],
             response_format={"type": "json_object"},
-            max_tokens=800, temperature=0.3,
+            max_tokens=2000, temperature=0.3,
         )
         await self._emit_usage(u)
 
@@ -166,8 +166,9 @@ class Agent:
             "planner",
             [{"role": "system", "content": SYNTH_SYSTEM},
              {"role": "user", "content":
-              "The user asked: %s\n\nWhat the steps produced:\n%s" % (goal, joined)}],
-            max_tokens=500, temperature=0.7,
+              "The user asked: %s\n\nYour working notes from each step:\n%s\n\n"
+              "Now write your reply to the user." % (goal, joined)}],
+            max_tokens=1500, temperature=0.7,
         )
         await self._emit_usage(u)
         return (getattr(msg, "content", "") or "").strip() or "Done."

@@ -81,11 +81,12 @@ class Turn:
 
 
 # Catalogue the fake reports, mimicking the real split across regions.
-FAKE_CATALOGUE = {
-    "us": ["nvidia/Nemotron-3-Ultra-550b-a55b", "nvidia/nemotron-3-super-120b-a12b",
-           "meta/llama-3.3-70b"],
-    "eu": ["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", "nvidia/Nemotron-3_5-Lightning"],
-}
+# Mirrors the live catalogue as probed on 2026-10-14: all four Nemotron models
+# are served in both regions, alongside non-Nemotron models we must not pick.
+_LIVE = ["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", "nvidia/Nemotron-3-Ultra-550b-a55b",
+         "nvidia/Nemotron-3_5-Lightning", "nvidia/nemotron-3-super-120b-a12b",
+         "meta/llama-3.3-70b", "deepseek-ai/DeepSeek-V4.1-Flash"]
+FAKE_CATALOGUE = {"us": list(_LIVE), "eu": list(_LIVE)}
 
 
 class FakeClient:
