@@ -1,0 +1,184 @@
+"""Three-tier Nemotron routing over Nebius Token Factory.
+
+ARGUS deliberately uses three different Nemotron models, because the product
+forces it:
+
+  watcher  -> Nemotron 3.5 Lightning  1M ctx @ $0.06/M -- runs constantly,
+                                       must be cheap and hold huge context
+  planner  -> Nemotron 3 Ultra 550B   the reasoning moment, used rarely
+  executor -> Nemotron 3 Nano 30B     fast, high-volume tool calls
+
+Model IDs are RESOLVED AT STARTUP against each region's /v1/models rather than
+hardcoded -- published sources disagree on casing, and the tiers live in
+different regions (Nano/Lightning: eu-north1, Super/Ultra: us-central1), so a
+single base URL 404s on half the catalogue.
+"""
+from __future__ import annotations
+import os, asyncio
+from dataclasses import dataclass, field
+from typing import Any, Callable, Literal
+
+Tier = Literal["watcher", "planner", "executor"]
+
+BASE_US = os.environ.get("NEBIUS_BASE_US", "https://api.tokenfactory.us-central1.nebius.com/v1/")
+BASE_EU = os.environ.get("NEBIUS_BASE_EU", "https://api.tokenfactory.eu-north1.nebius.com/v1/")
+
+
+@dataclass(frozen=True)
+class ModelSpec:
+    """A model family we know how to find and price."""
+    key: str                      # substring to match in the live catalogue
+    region: str                   # "us" | "eu"
+    price_in: float               # USD per 1M prompt tokens
+    price_out: float              # USD per 1M completion tokens
+    fallback_id: str              # used if catalogue lookup fails
+
+    def cost(self, prompt_tokens: int, completion_tokens: int) -> float:
+        return (prompt_tokens * self.price_in + completion_tokens * self.price_out) / 1_000_000
+
+
+CATALOGUE: dict[str, ModelSpec] = {
+    "lightning": ModelSpec("lightning", "eu", 0.06, 0.24, "nvidia/Nemotron-3_5-Lightning"),
+    "nano":      ModelSpec("nano",      "eu", 0.06, 0.24, "nvidia/nvidia-nemotron-3-nano-30b-a3b"),
+    "super":     ModelSpec("super",     "us", 0.30, 0.90, "nvidia/nemotron-3-super-120b-a12b"),
+    "ultra":     ModelSpec("ultra",     "us", 1.00, 3.00, "nvidia/Nemotron-3-Ultra-550b-a55b"),
+}
+
+TIER_PREFERENCE: dict[Tier, tuple[str, ...]] = {
+    "watcher":  ("lightning", "nano", "super"),
+    "planner":  ("ultra", "super", "nano"),
+    "executor": ("nano", "lightning", "super"),
+}
+
+
+@dataclass
+class Resolved:
+    tier: Tier
+    family: str
+    model_id: str
+    region: str
+    spec: ModelSpec
+
+
+@dataclass
+class Spend:
+    """Running cost, reported to the UI on every call."""
+    total_usd: float = 0.0
+    by_tier: dict[str, float] = field(default_factory=dict)
+    calls: int = 0
+
+    def add(self, tier: str, usd: float) -> float:
+        self.total_usd += usd
+        self.by_tier[tier] = self.by_tier.get(tier, 0.0) + usd
+        self.calls += 1
+        return self.total_usd
+
+
+class ModelRouter:
+    """Owns per-region clients, tier resolution, and cost accounting."""
+
+    def __init__(self, api_key: str | None = None,
+                 client_factory: Callable[[str, str], Any] | None = None) -> None:
+        self.api_key = api_key or os.environ.get("NEBIUS_API_KEY", "")
+        self._client_factory = client_factory or self._default_client_factory
+        self._clients: dict[str, Any] = {}
+        self.resolved: dict[Tier, Resolved] = {}
+        self.spend = Spend()
+        self.catalogue_ids: list[str] = []
+
+    def _default_client_factory(self, region: str, api_key: str) -> Any:
+        from openai import AsyncOpenAI
+        base = BASE_US if region == "us" else BASE_EU
+        return AsyncOpenAI(base_url=base, api_key=api_key, timeout=180.0, max_retries=2)
+
+    def client(self, region: str) -> Any:
+        if region not in self._clients:
+            self._clients[region] = self._client_factory(region, self.api_key)
+        return self._clients[region]
+
+    async def _list_models(self, region: str) -> list[str]:
+        try:
+            res = await self.client(region).models.list()
+            return [m.id for m in res.data]
+        except Exception as e:
+            print(f"[router] catalogue lookup failed for {region}: {type(e).__name__}: {e}")
+            return []
+
+    async def resolve(self) -> dict[Tier, Resolved]:
+        """Discover real model IDs, then bind each tier to the best available."""
+        us, eu = await asyncio.gather(self._list_models("us"), self._list_models("eu"))
+        live = {"us": us, "eu": eu}
+        self.catalogue_ids = sorted(set(us) | set(eu))
+
+        def find(spec: ModelSpec) -> str | None:
+            for mid in live.get(spec.region, []):
+                low = mid.lower()
+                if "nemotron" in low and spec.key in low:
+                    return mid
+            return None
+
+        for tier, prefs in TIER_PREFERENCE.items():
+            bound: Resolved | None = None
+            for family in prefs:
+                spec = CATALOGUE[family]
+                mid = find(spec)
+                if mid:
+                    bound = Resolved(tier, family, mid, spec.region, spec)
+                    break
+            if bound is None:
+                family = prefs[0]
+                spec = CATALOGUE[family]
+                bound = Resolved(tier, family, spec.fallback_id, spec.region, spec)
+                print(f"[router] {tier}: no live match, using fallback {spec.fallback_id}")
+            self.resolved[tier] = bound
+        return self.resolved
+
+    def for_tier(self, tier: Tier) -> Resolved:
+        if tier not in self.resolved:
+            spec = CATALOGUE[TIER_PREFERENCE[tier][0]]
+            self.resolved[tier] = Resolved(tier, spec.key, spec.fallback_id, spec.region, spec)
+        return self.resolved[tier]
+
+    async def complete(self, tier: Tier, messages: list[dict[str, Any]],
+                       tools: list[dict] | None = None,
+                       max_tokens: int = 2048,
+                       temperature: float = 0.6,
+                       response_format: dict | None = None) -> tuple[Any, dict[str, Any]]:
+        """Call the model bound to `tier`.
+
+        Returns (message, usage_info) where usage_info carries the numbers the
+        UI needs for the routing HUD and the cost meter.
+        """
+        r = self.for_tier(tier)
+        kwargs: dict[str, Any] = {
+            "model": r.model_id,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+        if response_format:
+            kwargs["response_format"] = response_format
+
+        resp = await self.client(r.region).chat.completions.create(**kwargs)
+
+        u = getattr(resp, "usage", None)
+        pin = getattr(u, "prompt_tokens", 0) or 0
+        pout = getattr(u, "completion_tokens", 0) or 0
+        cost = r.spec.cost(pin, pout)
+        cumulative = self.spend.add(tier, cost)
+
+        return resp.choices[0].message, {
+            "tier": tier, "model": r.model_id, "family": r.family,
+            "prompt_tokens": pin, "completion_tokens": pout,
+            "cost_usd": cost, "cumulative_cost_usd": cumulative,
+        }
+
+    def describe(self) -> str:
+        lines = ["tier       family      model id                                          region"]
+        for tier in ("watcher", "planner", "executor"):
+            r = self.for_tier(tier)
+            lines.append(f"{tier:10} {r.family:11} {r.model_id:49} {r.region}")
+        return "\n".join(lines)
