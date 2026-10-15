@@ -14,7 +14,8 @@ import datetime, json, itertools, os, re
 from . import events
 from .bus import EventBus
 from .models import BudgetExceeded, ModelRouter
-from .prompts import PLANNER_SYSTEM, EXECUTOR_SYSTEM, WRITER_SYSTEM, SYNTH_SYSTEM
+from .prompts import (PLANNER_SYSTEM, EXECUTOR_SYSTEM, WRITER_SYSTEM, SYNTH_SYSTEM,
+                      DOC_FORM, CODE_FORM)
 from .tools.registry import Registry
 from .tools._workspace import SKIP_DIRS, human_size
 
@@ -52,7 +53,13 @@ def list_files(root, limit=80):
     return "\n".join(out) or "- (empty)"
 
 
-_DOC_RE = re.compile(r"([\w\-./\\]+\.(?:md|markdown|txt))", re.I)
+CODE_EXT = ("py", "js", "jsx", "ts", "tsx", "mjs", "cjs", "json", "css", "html", "go", "rs",
+            "java", "rb", "sh", "yaml", "yml", "toml")
+_DOC_RE = re.compile(r"([\w\-./\\]+\.(?:md|markdown|txt|%s))\b" % "|".join(CODE_EXT), re.I)
+
+
+def is_code(path):
+    return path.rsplit(".", 1)[-1].lower() in CODE_EXT if "." in path else False
 
 
 def pick_target(step_title, goal, root):
@@ -236,11 +243,12 @@ class Agent:
         system = WRITER_SYSTEM.format(
             step=step["title"], goal=goal, workspace=self.workspace, context=context,
             today=_today(), files=list_files(self.workspace), facts=self_facts(self.router),
-            target=target)
+            target=target,
+            form=(CODE_FORM % target) if is_code(target) else DOC_FORM)
         msg, u = await self.router.complete(
             "planner",
             [{"role": "system", "content": system},
-             {"role": "user", "content": "Write the document now."}],
+             {"role": "user", "content": "Write the file now."}],
             max_tokens=8000, temperature=0.4)
         await self._emit_usage(u)
         doc = strip_fences((getattr(msg, "content", "") or "").strip())
@@ -317,6 +325,13 @@ class Agent:
                 if name == "write_file" and result.ok:
                     await self._emit_artifact(args, result)
                     wrote = result.summary
+                if result.ok and name in ("tavily_search", "fetch_url"):
+                    await self._emit_reading(name, args, result)
+                # Any tool may show itself in the UI by returning an `activity`
+                # payload in meta (e.g. a browsing tool showing the page it's on).
+                act = result.meta.get("activity") if isinstance(result.meta, dict) else None
+                if isinstance(act, dict) and act.get("source"):
+                    await self.bus.emit({**act, "type": "activity"})
                 if result.ok and result.detail and name != "write_file":
                     material.append("[%s %s]\n%s" % (
                         name, json.dumps(args)[:160], result.detail[:MATERIAL_PER_TOOL]))
@@ -333,6 +348,29 @@ class Agent:
         summary = summary or ("(no summary returned for: %s)" % step["title"])
         mat = "\n\n".join(material)[:MATERIAL_PER_STEP]
         return summary, mat
+
+    async def _emit_reading(self, name, args, result):
+        """Show what ARGUS is reading on the web in the UI's browser window --
+        real pages and real results, live."""
+        if name == "tavily_search":
+            cites = result.meta.get("citations") or []
+            lines = [{"text": "[%d] %s" % (c["n"], c["title"][:90]), "tone": "hl" if i == 0 else None}
+                     for i, c in enumerate(cites[:6])]
+            answer = (result.meta.get("answer") or "").strip()
+            if answer:
+                lines.append({"text": answer[:220], "tone": "dim"})
+            ev = {"type": "activity", "source": "browser", "app": "Argus · search",
+                  "title": "Searching: %s" % str(args.get("query", ""))[:90],
+                  "url": "tavily · %s" % ", ".join(c["domain"] for c in cites[:3]),
+                  "lines": [{k: v for k, v in l.items() if v is not None} for l in lines],
+                  "focus": True}
+        else:
+            text = [ln.strip() for ln in (result.detail or "").splitlines() if ln.strip()]
+            title = text[0].lstrip("# ")[:110] if text else str(args.get("url", ""))
+            ev = {"type": "activity", "source": "browser", "app": "Argus · reading",
+                  "title": title, "url": str(args.get("url", ""))[:120],
+                  "lines": [{"text": ln[:160]} for ln in text[1:6]], "focus": True}
+        await self.bus.emit(ev)
 
     async def _emit_artifact(self, args, result):
         path = str(result.meta.get("path") or args.get("path", ""))

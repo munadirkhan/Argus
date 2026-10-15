@@ -158,6 +158,9 @@ class Watcher:
         self.seen: dict[str, dict] = {}         # every observation ever made
         self._ids = itertools.count(1)
         self.enabled = True
+        # Set by the server: returns what the sensors (terminal, browser...)
+        # currently see, so the watcher looks at more than the filesystem.
+        self.context_fn = None
 
     def dismiss(self, obs_id: str) -> None:
         self.dismissed.add(obs_id)
@@ -189,10 +192,15 @@ class Watcher:
 
         return await self.consider(added, modified, removed)
 
-    async def consider(self, added, modified, removed) -> dict | None:
-        """Ask the cheap model whether this is worth interrupting for."""
+    async def consider(self, added, modified, removed, reason: str = "") -> dict | None:
+        """Ask the cheap model whether this is worth interrupting for.
+
+        `reason` is set when a sensor woke the watcher (e.g. an error just
+        appeared in the user's terminal) rather than a file change.
+        """
         r = self.router.for_tier("watcher")
-        await self.bus.emit(events.agent_thinking("watcher", r.model_id, "Observing workspace"))
+        await self.bus.emit(events.agent_thinking(
+            "watcher", r.model_id, "Noticed: " + reason[:60] if reason else "Observing workspace"))
 
         files = self.previous.files if self.previous else {}
         sizes = {p: sz for p, (_mt, sz) in files.items()}
@@ -209,6 +217,16 @@ class Watcher:
                 % (time.strftime("%Y-%m-%d"), self.root, summary or "(none)", inventory))
         if peeks:
             user += "\n\nOpening lines of the new or changed files:\n" + "\n\n".join(peeks)
+        senses = ""
+        if self.context_fn:
+            try:
+                senses = (self.context_fn() or "").strip()
+            except Exception:
+                senses = ""
+        if senses:
+            user += "\n\nWhat your other senses see right now (the user's apps):\n" + senses
+        if reason:
+            user += "\n\nYou were woken because: " + reason
 
         try:
             msg, u = await self.router.complete(

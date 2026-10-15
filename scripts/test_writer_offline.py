@@ -71,6 +71,34 @@ async def main():
                 [e["message"] for e in hist if e["type"] == "error"])
     ok &= check("reply delivered", "outdated" in answer)
 
+    print("\n=== code fix: writes the code file, verbatim ===")
+    code_ws = tempfile.mkdtemp(prefix="argus_code_")
+    os.environ["ARGUS_WATCH_ROOT"] = code_ws
+    open(os.path.join(code_ws, "watchlist.js"), "w").write("export const rows = (q) => q.data.map(r => r);\n")
+    open(os.path.join(code_ws, "notes.md"), "w").close()   # must NOT be chosen
+    ok &= check("named code file wins over empty notes.md",
+                pick_target("Write the fixed watchlist.js", "", code_ws) == "watchlist.js")
+    FIXED = "// q.data is undefined until the first fetch resolves.\nexport const rows = (q) => (q.data ?? []).map(r => r);"
+    script = {"ultra": [
+        Turn(text=json.dumps({"steps": [{"title": "Write the fixed watchlist.js", "kind": "write"}]})),
+        Turn(text=FENCE + "js\n" + FIXED + "\n" + FENCE),
+        Turn(text="Patched watchlist.js."),
+    ]}
+    sink = []
+    r3 = ModelRouter(api_key="fake", client_factory=FakeClient.factory(script, sink=sink))
+    await r3.resolve()
+    bus = EventBus()
+    await Agent(r3, Registry(), bus, workspace=code_ws).run("fix the TypeError in watchlist.js")
+    got = open(os.path.join(code_ws, "watchlist.js"), encoding="utf-8").read()
+    ok &= check("code file rewritten, fences stripped", got == FIXED, got[:80])
+    ok &= check("notes.md untouched", os.path.getsize(os.path.join(code_ws, "notes.md")) == 0)
+    writer_prompt = next((c["messages"][0]["content"] for cl in sink for c in cl.calls
+                          if "writing stage" in c["messages"][0]["content"]), "")
+    ok &= check("writer told it's code, not markdown",
+                "is a code file" in writer_prompt and "markdown headings" not in writer_prompt)
+    arts = [e for e in bus.history() if e["type"] == "artifact.write"]
+    ok &= check("artifact marked as code", arts and arts[0]["kind"] == "code", arts[:1])
+
     print("\n" + ("ALL CHECKS PASSED" if ok else "SOME CHECKS FAILED"))
     return 0 if ok else 1
 

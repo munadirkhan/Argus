@@ -4,7 +4,7 @@ import importlib, pkgutil, asyncio
 from pathlib import Path
 from .base import Tool, ToolResult
 
-_SKIP = {"base", "registry"}
+_SKIP = {"base", "registry", "tests", "fixtures"}
 
 
 def discover() -> dict[str, Tool]:

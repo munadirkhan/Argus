@@ -18,6 +18,7 @@ from .bus import EventBus
 from .models import ModelRouter
 from .tools.registry import Registry
 from .watcher import Watcher, scan
+from .sensors.registry import Sensors
 
 try:
     from dotenv import load_dotenv
@@ -61,25 +62,44 @@ class Session:
         self.agent = Agent(self.router, self.registry, self.bus, workspace=self.root)
         self.watcher = Watcher(self.router, self.bus, self.root,
                                interval=WATCH_INTERVAL, cooldown=WATCH_COOLDOWN)
+        self.sensors = Sensors()
+        self.watcher.context_fn = self.sensors.context
         self._agent_lock = asyncio.Lock()
         self._watch_task: asyncio.Task | None = None
+        self._sense_task: asyncio.Task | None = None
         self.ready = False
 
     async def start(self) -> None:
         await self.router.resolve()
         print("[argus] model routing:\n" + self.router.describe(), flush=True)
+        print("[argus] sensors: %s" % (", ".join(self.sensors.names) or "(none)"), flush=True)
         self.ready = True
         await self.bus.emit(events.session_state(
             self.runtime, "connected", self.root, self.label))
         self._watch_task = asyncio.create_task(self.watcher.run_forever())
+        self._sense_task = asyncio.create_task(
+            self.sensors.run_forever(self.bus.emit, self.on_sensor_alert))
+
+    async def on_sensor_alert(self, sensor, event: dict) -> None:
+        """A sensor saw something urgent (e.g. a stack trace). Wake the watcher
+        now rather than at its next tick -- unless ARGUS is mid-task or has
+        spoken too recently to interrupt again."""
+        if not self.watcher.enabled or self._agent_lock.locked():
+            return
+        if time.time() - self.watcher.last_spoke_at < self.watcher.cooldown:
+            return
+        bad = [l.get("text", "") for l in event.get("lines") or [] if l.get("tone") == "err"]
+        reason = "%s reported: %s" % (sensor.name, (bad[0] if bad else event.get("title", ""))[:160])
+        asyncio.create_task(self.watcher.consider([], [], [], reason=reason))
 
     async def stop(self) -> None:
-        if self._watch_task:
-            self._watch_task.cancel()
-            try:
-                await self._watch_task
-            except asyncio.CancelledError:
-                pass
+        for task in (self._watch_task, self._sense_task):
+            if task:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
     async def handle_client_message(self, msg: dict) -> None:
         kind = msg.get("type")
@@ -153,6 +173,7 @@ async def health() -> dict:
         "runtime": session.runtime,
         "root": session.root,
         "tools": sorted(session.registry.tools),
+        "sensors": session.sensors.names,
         "models": {t: session.router.for_tier(t).model_id
                    for t in ("watcher", "planner", "executor")},
         "spend_usd": round(session.router.spend.total_usd, 6),
@@ -176,6 +197,21 @@ async def artifact(path: str) -> dict:
     with open(full, encoding="utf-8", errors="replace") as f:
         text = f.read(400_000)
     return {"ok": True, "path": full.replace("\\", "/"), "text": text}
+
+
+@app.post("/sense/{name}")
+async def sense(name: str, payload: dict) -> dict:
+    """Push data to a sensor (e.g. a browser extension reporting the active
+    tab). The sensor decides what to keep; nothing here is trusted as
+    instructions -- it is context the watcher reads."""
+    sensor = next((s for s in session.sensors.sensors if s.name == name), None)
+    if sensor is None:
+        return {"ok": False, "error": "no sensor named %r" % name}
+    try:
+        accepted = bool(sensor.receive(payload))
+    except Exception as e:
+        return {"ok": False, "error": "%s: %s" % (type(e).__name__, e)}
+    return {"ok": accepted}
 
 
 @app.websocket("/ws")

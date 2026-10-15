@@ -124,6 +124,33 @@ Open `http://localhost:7600/health` to see which models got bound.
 ARGUS_FAKE=1 python -m core.server
 ```
 
+### The interface
+
+```bash
+cd web && npm install && npm run dev      # http://localhost:5173
+```
+
+**LIVE** connects to the core on port 7600. **SIMULATE** plays labelled
+sessions (markets, code) and a recording of a real research run, for when you
+want to see the whole thing without spending tokens. Simulated sessions use
+illustrative data; LIVE never does.
+
+To watch Argus notice something for real, point the core at a scratch folder
+and drop the demo notes into it:
+
+```bash
+python scripts/seed_demo.py --reset      # then start the core with ARGUS_WATCH_ROOT at ../mark-ii
+python scripts/seed_demo.py --drop       # Argus speaks within one watch interval
+```
+
+### Sensors
+
+Beyond the filesystem, Argus sees through sensors in `core/sensors/`, one file
+each (contract: `docs/SENSOR_CONTRACT.md`). A sensor reports what the user's
+apps show; the watcher reads it on every look, and an urgent event (a crash in
+the dev server) wakes it immediately. Browser extensions push to
+`POST /sense/<name>`.
+
 ### Tests
 
 No API key or network needed for any of these:
@@ -133,6 +160,8 @@ python scripts/test_agent_offline.py      # plan/execute/synthesise, tool dispat
 python scripts/test_watcher_offline.py    # diffing, restraint, cooldown, cost
 python scripts/test_server_offline.py     # websocket contract end to end
 python scripts/test_budget_offline.py     # the spend cap holds
+python scripts/test_writer_offline.py     # documents and code fixes land as one file
+python scripts/test_sensors_offline.py    # sensor socket: forwarding, alerts, gating
 
 python scripts/verify_nebius.py           # live: models, tool calling (needs a key)
 python scripts/probe_reasoning.py         # live: thinking on/off per model

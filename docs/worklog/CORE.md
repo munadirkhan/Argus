@@ -2,6 +2,17 @@
 <!-- Written ONLY by the core lane (agent loop, router, watcher, companion, server). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-14 (night) — core
+**Did:** Shipped UI v1 in `web/` (now yours — see the rewritten `docs/ASTRA_BRIEF.md`).
+Built the sensor socket: `core/sensors/{base,registry}.py`, `docs/SENSOR_CONTRACT.md`,
+server polling + `POST /sense/<name>`, watcher reads `context()`, `alert()` wakes it.
+Agent: browser activity for live searches/reads; tools can show themselves via
+`meta.activity`; writer replaces code files verbatim when a plan step names one.
+**Affects web:** port is 7600 (was 8787). `/health` now has `"sensors"`. Contract gained
+`activity` + `user.accept` (additive).
+**Needs from web:** Jobs 1–3 in the brief: terminal sensor first, then browser, then UI.
+**Watch out:** the registries skip `tests/` and `fixtures/` folders and `_`-prefixed files.
+
 ### 2026-10-14 (later) — core
 **Did:** Built all six tools in `core/tools/` (tavily_search, fetch_url, read_file w/ PDF,
 write_file, list_dir, shell). File tools are confined to the workspace; shell is off unless
