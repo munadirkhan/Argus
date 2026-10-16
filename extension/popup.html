@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Argus · Browser sense</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <h1>ARGUS <span>· BROWSER SENSE</span></h1>
+  <label class="toggle"><input id="enabled" type="checkbox"> Share the page I’m reading</label>
+  <p id="status" role="status">off</p>
+  <p>Shares page title, URL, selected text and a short visible-text excerpt with Argus on this computer after 3 seconds. Form fields and private windows are excluded.</p>
+  <label for="denylist">Never share these domains</label>
+  <textarea id="denylist" rows="9" spellcheck="false"></textarea>
+  <p>One domain per line. <code>*</code> matches any characters. Subdomains are also excluded.</p>
+  <button id="save">SAVE EXCLUSIONS</button>
+  <script type="module" src="popup.js"></script>
+</body></html>

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Argus · Browser sense",
+  "version": "1.0.0",
+  "description": "Opt in to share the page you are reading with your local Argus core.",
+  "permissions": ["tabs", "scripting", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "action": {"default_popup": "popup.html"},
+  "incognito": "not_allowed"
+}
