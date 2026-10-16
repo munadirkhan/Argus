@@ -1,0 +1,11 @@
+:root { color-scheme: dark; font: 12px/1.6 Georgia, serif; background: #080609; color: #d8cbb3; }
+body { width: 310px; margin: 0; padding: 20px; }
+h1 { color: #d6a04c; font-size: 18px; letter-spacing: .2em; margin: 0 0 18px; }
+h1 span { display: block; font: 9px monospace; letter-spacing: .15em; }
+.toggle { font-size: 15px; display: flex; gap: 9px; align-items: center; }
+input { accent-color: #ff8a2a; }
+#status { color: #d6a04c; overflow-wrap: anywhere; font: 11px monospace; }
+p { color: #a49b8b; }
+textarea { box-sizing: border-box; width: 100%; margin-top: 7px; resize: vertical; background: #100c0c; color: #d8cbb3; border: 1px solid #594126; padding: 9px; font: 11px/1.5 monospace; }
+button { background: transparent; color: #d6a04c; border: 1px solid #594126; padding: 9px 12px; font: 10px monospace; letter-spacing: .15em; cursor: pointer; }
+button:hover, button:focus-visible { border-color: #d6a04c; }
