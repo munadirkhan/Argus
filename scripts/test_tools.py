@@ -30,9 +30,12 @@ async def main():
     call = reg.call
 
     print("=== discovery ===")
-    ok &= check("six tools", sorted(reg.tools) == sorted(
-        ["fetch_url", "list_dir", "read_file", "shell", "tavily_search", "write_file"]),
-        sorted(reg.tools))
+    # The baseline every build must have. Extra tools (e.g. `browse`, which needs
+    # Playwright) are allowed and tested in their own suites, so adding one does
+    # not break this gate.
+    REQUIRED = {"fetch_url", "list_dir", "read_file", "shell", "tavily_search", "write_file"}
+    ok &= check("required tools present", REQUIRED <= set(reg.tools),
+                "missing: %s" % sorted(REQUIRED - set(reg.tools)))
     ok &= check("schemas are valid function defs",
                 all(s["type"] == "function" and s["function"]["parameters"]["type"] == "object"
                     for s in reg.schemas()))

@@ -36,7 +36,7 @@ async def main():
         page = await browser.new_page(viewport={'width': 1920, 'height': 1080})
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.on('console', lambda msg: errors.append(msg.text) if msg.type == 'error' else None)
-        await page.goto('http://127.0.0.1:5173/')
+        await page.goto('http://localhost:5173/')
         await page.locator('.sense').filter(has_text='BROWSER').wait_for()
         active = True
         await ws.send(json.dumps({'type': 'user.message', 'text':

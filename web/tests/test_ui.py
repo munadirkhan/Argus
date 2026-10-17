@@ -23,7 +23,7 @@ async def verify(browser, width, height, evidence):
         sockets.append(route)
         route.on_message(lambda raw: messages.append(json.loads(raw)))
     await page.route_web_socket('**/ws', socket)
-    await page.goto('http://127.0.0.1:5173/')
+    await page.goto('http://localhost:5173/')
     await page.locator('.sense').filter(has_text='TERMINAL').wait_for()
     seq = 0
     def send(event):
@@ -145,7 +145,7 @@ async def main(evidence):
         page = await browser.new_page(viewport={'width': 1280, 'height': 720})
         await page.route('**/health', lambda route: route.fulfill(json={'sensors': []}))
         await page.route_web_socket('**/ws', lambda route: None)
-        await page.goto('http://127.0.0.1:5173/?record=1')
+        await page.goto('http://localhost:5173/?record=1')
         await page.wait_for_selector('.video-mode')
         assert await page.locator('#argus-composer').get_attribute('placeholder') == ''
         assert await page.locator('body').evaluate('(e) => getComputedStyle(e).cursor') == 'none'

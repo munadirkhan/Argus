@@ -45,7 +45,7 @@ async def main(args):
         browser = await pw.chromium.launch()
         page = await browser.new_page(viewport={'width': 1920, 'height': 1080})
         page.on('pageerror', lambda e: errors.append(str(e)))
-        await page.goto('http://127.0.0.1:5173/')
+        await page.goto('http://localhost:5173/')
         await page.get_by_role('button', name='LIVE', exact=True).wait_for()
         await asyncio.sleep(1)
         recorder = page.locator('.record-toggle')

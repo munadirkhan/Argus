@@ -88,7 +88,7 @@ async def main():
             await asyncio.sleep(3.8)
             ui = await pw.chromium.launch()
             screen = await ui.new_page(viewport={'width': 1920, 'height': 1080})
-            await screen.goto('http://127.0.0.1:5173/')
+            await screen.goto('http://localhost:5173/')
             await screen.locator('.browser .btitle').filter(has_text='Example Domain').wait_for()
             out = ROOT / 'web/.local/browser'
             out.mkdir(parents=True, exist_ok=True)

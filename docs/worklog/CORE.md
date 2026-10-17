@@ -2,6 +2,18 @@
 <!-- Written ONLY by the core lane (agent loop, router, watcher, companion, server). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-17 — core · integration
+**Did:** Merged all three web-lane jobs into main. Cleared the gate: `scripts/test_tools.py`
+now asserts the six REQUIRED tools are present rather than an exact list, so optional tools
+(`browse`) no longer break it. Verified every suite on this machine.
+**Affects web:** Acceptance tests now open `http://localhost:5173`, not `127.0.0.1` -- Vite
+binds IPv6-only here, so the hardcoded IPv4 literal was refused. The SSRF probe in
+`test_browse.py` still targets 127.0.0.1 deliberately; left as is.
+**Needs from web:** nothing. All three PRs can close.
+**Watch out:** extension tests need a real browser channel (`ARGUS_TEST_BROWSER=msedge`);
+Playwright's headless *shell* cannot load extensions. Run terminal tests with
+PYTHONIOENCODING=utf-8 on Windows.
+
 ### 2026-10-14 (night) — core
 **Did:** Shipped UI v1 in `web/` (now yours — see the rewritten `docs/ASTRA_BRIEF.md`).
 Built the sensor socket: `core/sensors/{base,registry}.py`, `docs/SENSOR_CONTRACT.md`,
