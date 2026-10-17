@@ -2,6 +2,12 @@
 <!-- Written ONLY by the web lane (frontend, tools layer, sandbox runtime). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-16 23:16 — web · terminal acceptance
+**Did:** Real Nemotron crash → prophecy → Proceed → read/write → INSCRIBED → clean rerun passed; watcher named `watchlist.js:24`, detection ~1.15s, no browser errors; screenshots in `web/evidence/terminal/`.
+**Affects core:** Updated local Token Factory credentials authenticate with the existing configuration; no routing, watcher, agent or prompt changes were needed.
+**Needs from core:** None for Job 1. The separately integrated browser job still needs the frozen six-tool assertion updated by core before its PR.
+**Watch out:** Shift+R captured the successful session in ignored `web/.local/terminal-success/ui-recording.jsonl`; only sanitized replay and screenshots are publishable. This supersedes the earlier credential blocker.
+
 ### 2026-10-16 18:00 — web · terminal
 **Did:** Added terminal wrapper/sensor, real Node crash fixture, seeder, offline tests and live acceptance harness; all seven core suites and TypeScript pass.
 **Affects core:** Auto-discovered `terminal` polls at 0.5s; real crash reached LIVE UI in ~0.67s, `/health` lists terminal; screenshot in `web/evidence/terminal/`.

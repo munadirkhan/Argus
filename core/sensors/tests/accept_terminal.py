@@ -48,6 +48,9 @@ async def main(args):
         await page.goto('http://127.0.0.1:5173/')
         await page.get_by_role('button', name='LIVE', exact=True).wait_for()
         await asyncio.sleep(1)
+        recorder = page.locator('.record-toggle')
+        if await recorder.count():
+            await page.keyboard.press('Shift+R')
 
         async def run_fixture():
             return await asyncio.create_subprocess_exec(sys.executable, '-m', 'core.sensors.terminal_log',
@@ -65,7 +68,7 @@ async def main(args):
         await page.screenshot(path=str(out / 'terminal-crash-1920.png'))
         print(f'PASS: real crash displayed, approximately {latency:.3f}s from crash to websocket', flush=True)
         if args.proceed:
-            button = page.get_by_role('button', name='PROCEED', exact=True)
+            button = page.locator('.btn-accept')
             await button.wait_for(timeout=60_000)
             await page.screenshot(path=str(out / 'terminal-prophecy-1920.png'))
             await button.click()
@@ -77,6 +80,10 @@ async def main(args):
             await page.locator('.term .ok').filter(has_text='[exit 0]').wait_for()
             await page.screenshot(path=str(out / 'terminal-fixed-1920.png'))
             print('PASS: Proceed wrote code and the real app now exits 0', flush=True)
+        if await recorder.count():
+            async with page.expect_download() as download_info:
+                await page.keyboard.press('Shift+R')
+            await (await download_info.value).save_as(out / 'ui-recording.jsonl')
         assert not errors, errors
         (out / 'acceptance.json').write_text(json.dumps({'sensors': health['sensors'],
             'latency_seconds_approx': round(latency, 3), 'proceed_verified': args.proceed,
