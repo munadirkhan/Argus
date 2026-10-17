@@ -1,2 +1,3 @@
 # Local acceptance workspaces, raw recordings, and service logs.
 .local/
+*.tsbuildinfo

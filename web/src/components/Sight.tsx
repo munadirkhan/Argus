@@ -121,13 +121,16 @@ function MarketView({ s }: { s: Sight }) {
 
 /* ----------------------------------------------------- terminal / editor */
 function TerminalView({ s }: { s: Sight }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [s.at]);
   return (
-    <div className="term">
-      {(s.lines ?? []).map((l, i) => (
-        <motion.div key={`${s.at}-${i}`} className={`tl ${l.tone ?? ""}`}
-          initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}>
+    <div className="term terminal-output" ref={ref} tabIndex={0} aria-label="Terminal output">
+      {(s.rows ?? []).map((l) => (
+        <div key={l.id} className={`tl ${l.tone ?? ""} ${l.tone === 'err' && Date.now() - l.arrivedAt < 500 ? 'arrived' : ''}`}>
           {l.text}
-        </motion.div>
+        </div>
       ))}
       <span className="cursor">▌</span>
     </div>
@@ -200,7 +203,7 @@ function Window({ s, side, focused }: { s: Sight; side: "left" | "right"; focuse
   return (
     <motion.div
       ref={ref}
-      key={s.source + s.at}
+      key={s.source}
       className={`sight ${side} ${focused ? "watched" : ""}`}
       initial={{ opacity: 0, x: side === "left" ? -24 : 24, scale: 0.97 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -258,10 +261,10 @@ export default function SightWindows() {
   return (
     <>
       <AnimatePresence>
-        {left && <Window key={"L" + left.source} s={left} side="left" focused={focusSide === "left"} />}
+        {left && <Window key={"L" + left.source} s={left} side="left" focused={focus === left.source} />}
       </AnimatePresence>
       <AnimatePresence>
-        {right && <Window key={"R" + right.source} s={right} side="right" focused={focusSide === "right"} />}
+        {right && <Window key={"R" + right.source} s={right} side="right" focused={focus === right.source} />}
       </AnimatePresence>
       {(left || right) && <Beam side={focusSide} />}
     </>
