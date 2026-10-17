@@ -19,13 +19,13 @@ export default function Prophecy() {
           initial={{ opacity: 0, y: 26, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 14 }}
-          transition={{ duration: 0.9, ease: [0.2, 0.7, 0.2, 1], delay: 0.35 }}
+          transition={{ duration: 0.45, ease: [0.2, 0.7, 0.2, 1] }}
         >
           <motion.span
             className="sweep"
             initial={{ scaleX: 0, opacity: 1 }}
             animate={{ scaleX: 1, opacity: [1, 1, 0.35] }}
-            transition={{ duration: 1.4, delay: 0.5, ease: "easeOut" }}
+            transition={{ duration: 0.45, ease: "easeOut" }}
           />
           <span className="corner tl" />
           <span className="corner tr" />
@@ -40,10 +40,10 @@ export default function Prophecy() {
           <div className="offer">{o.suggestion}</div>
           <div className="actions">
             <button className="btn-accept" onClick={() => accept(o.id)}>
-              PROCEED
+              PROCEED <kbd>↵</kbd>
             </button>
             <button className="btn-dismiss" onClick={() => dismiss(o.id)}>
-              NOT NOW
+              NOT NOW <kbd>Esc</kbd>
             </button>
           </div>
           <div className="conf">

@@ -1,5 +1,5 @@
 import { moodOf, useArgus } from "../lib/store";
-import { startReplay, switchSource } from "../lib/connection";
+import { startReplay, switchSource, toggleRecording } from "../lib/connection";
 import { basename } from "../lib/format";
 import { SCENARIOS } from "../sim/scenarios";
 import { EyeGlyph } from "./Ornament";
@@ -21,6 +21,7 @@ export default function Header() {
   const scenario = useArgus((s) => s.scenario);
   const sc = scenario ? SCENARIOS[scenario] : null;
   const sim = source === "replay";
+  const recording = useArgus(s => s.recording);
 
   const connLabel =
     conn === "live" ? "Live" : conn === "connecting" ? "Connecting" : conn === "offline" ? "Offline" : "";
@@ -56,6 +57,11 @@ export default function Header() {
             ))}
           </div>
         )}
+        {!sim && <button className={`record-toggle ${recording ? 'recording' : ''}`}
+          onClick={toggleRecording} disabled={!recording && conn !== 'live'} aria-pressed={recording}
+          title="Shift+R · download raw session events on stop">
+          <span className="dot" />{recording ? 'STOP REC' : 'RECORD'} <kbd>⇧R</kbd>
+        </button>}
         {sim ? (
           <span className={`pill ${sc?.kind === "recorded" ? "rec" : "simpill"}`} title={sc?.blurb}>
             <span className="dot live" />

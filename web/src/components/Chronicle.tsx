@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
+import { VIDEO_MODE } from '../lib/keyboard';
 import ReactMarkdown from "react-markdown";
 import { useArgus, type Entry } from "../lib/store";
 import { speak } from "../lib/connection";
@@ -9,6 +10,7 @@ import { EyeGlyph, Panel } from "./Ornament";
 const VERB: Record<string, string> = {
   tavily_search: "SEARCH",
   fetch_url: "READ WEB",
+  browse: "BROWSE",
   read_file: "READ",
   write_file: "INSCRIBE",
   list_dir: "SURVEY",
@@ -140,11 +142,13 @@ function Composer() {
     <div className="composer">
       <EyeGlyph size={20} lit={busy} />
       <input
+        id="argus-composer"
+        aria-label="Speak to Argus"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
         placeholder={
-          conn !== "live"
+          VIDEO_MODE ? '' : conn !== "live"
             ? "Argus is not connected — replay is read-only"
             : busy
               ? `Argus is at work${note ? ` — ${note.toLowerCase()}` : ""}…`
@@ -152,6 +156,7 @@ function Composer() {
         }
         disabled={conn !== "live" || busy}
       />
+      <kbd className="composer-key" title="Focus composer">/</kbd>
       <button className="invoke" disabled={!can} onClick={submit}>
         INVOKE
       </button>
