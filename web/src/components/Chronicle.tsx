@@ -6,6 +6,7 @@ import { useArgus, type Entry } from "../lib/store";
 import { speak } from "../lib/connection";
 import { basename, bytes, relative } from "../lib/format";
 import { EyeGlyph, Panel } from "./Ornament";
+import Composer from "./Composer";
 
 const VERB: Record<string, string> = {
   tavily_search: "SEARCH",
@@ -126,42 +127,6 @@ function Row({ e }: { e: Entry }) {
     case "error":
       return <div className="err">{e.message}</div>;
   }
-}
-
-function Composer() {
-  const [text, setText] = useState("");
-  const busy = useArgus((s) => s.busy);
-  const conn = useArgus((s) => s.conn);
-  const note = useArgus((s) => (s.activeTier ? s.tiers[s.activeTier].note : ""));
-  const can = conn === "live" && !busy && text.trim().length > 0;
-  const submit = () => {
-    if (!can) return;
-    if (speak(text.trim())) setText("");
-  };
-  return (
-    <div className="composer">
-      <EyeGlyph size={20} lit={busy} />
-      <input
-        id="argus-composer"
-        aria-label="Speak to Argus"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
-        placeholder={
-          VIDEO_MODE ? '' : conn !== "live"
-            ? "Argus is not connected — replay is read-only"
-            : busy
-              ? `Argus is at work${note ? ` — ${note.toLowerCase()}` : ""}…`
-              : "Speak, and Argus will act…"
-        }
-        disabled={conn !== "live" || busy}
-      />
-      <kbd className="composer-key" title="Focus composer">/</kbd>
-      <button className="invoke" disabled={!can} onClick={submit}>
-        INVOKE
-      </button>
-    </div>
-  );
 }
 
 export default function Chronicle() {

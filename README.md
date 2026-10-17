@@ -130,6 +130,12 @@ ARGUS_FAKE=1 python -m core.server
 cd web && npm install && npm run dev      # http://localhost:5173
 ```
 
+The composer takes dictation (click the mic — push-to-talk, never background
+listening; Chrome's Web Speech API streams that audio to Google, which is worth
+knowing for a tool that otherwise stays local) and file references: type `@` or
+click `+` to pick a workspace file. A reference hands ARGUS a path it can open
+with its own confined file tools, rather than a copy it cannot verify.
+
 **LIVE** connects to the core on port 7600. **SIMULATE** plays labelled
 sessions (markets, code) and a recording of a real research run, for when you
 want to see the whole thing without spending tokens. Simulated sessions use

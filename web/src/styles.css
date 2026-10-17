@@ -409,3 +409,39 @@ button:focus-visible, .terminal-output:focus-visible { outline: 1px solid var(--
 @media (prefers-reduced-motion: reduce) {
   .terminal-output .tl.arrived { animation: none; }
 }
+
+/* ---------- composer: file reference (@) and dictation ---------- */
+.composer { position: relative; }
+.composer.listening { box-shadow: inset 0 1px 0 rgba(255,138,42,.35); }
+
+.composer-btn { all: unset; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; cursor: pointer; color: var(--ash); border: 1px solid var(--line);
+  transition: color .2s, border-color .2s, background .2s; flex: none; position: relative; }
+.composer-btn:hover:not(:disabled) { color: var(--bone); border-color: var(--line-strong); background: var(--amber-soft); }
+.composer-btn:disabled { opacity: .3; cursor: default; }
+.composer-btn.mic.on { color: var(--void); background: var(--amber); border-color: var(--amber); }
+.composer-btn .pulse { position: absolute; inset: -4px; border: 1px solid var(--amber); pointer-events: none;
+  animation: micpulse 1.5s ease-out infinite; }
+@keyframes micpulse { 0% { opacity: .9; transform: scale(.88); } 100% { opacity: 0; transform: scale(1.5); } }
+
+.picker { position: absolute; left: 14px; right: 14px; bottom: calc(100% + 8px); z-index: 20;
+  max-height: 268px; overflow: auto; padding: 4px;
+  background: linear-gradient(180deg, rgba(20,14,11,.98), rgba(7,5,6,.99));
+  border: 1px solid var(--line-strong); backdrop-filter: blur(18px);
+  box-shadow: 0 26px 60px -24px #000, 0 0 30px -14px rgba(255,138,42,.4); }
+.picker-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 7px 10px 8px; border-bottom: 1px solid var(--line); }
+.picker-head .mono-dim { font-size: 9.5px; letter-spacing: .1em; }
+.picker-row { all: unset; display: flex; align-items: baseline; gap: 12px; width: calc(100% - 20px);
+  padding: 7px 10px; cursor: pointer; border-left: 2px solid transparent; }
+.picker-row.on { background: rgba(255,138,42,.1); border-left-color: var(--amber); }
+.picker-row .pf { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12.5px; color: var(--bone); }
+.picker-row.on .pf { color: #fff; }
+.picker-row .pb { font-size: 10.5px; color: var(--ash); white-space: nowrap; }
+
+.mic-error { position: absolute; left: 14px; bottom: calc(100% + 8px); z-index: 20;
+  display: flex; align-items: center; gap: 10px; padding: 7px 12px; font-size: 11px; color: var(--ember);
+  background: rgba(20,8,6,.97); border: 1px solid rgba(236,90,44,.5); }
+.mic-error button { all: unset; cursor: pointer; color: var(--ash); font-size: 14px; line-height: 1; }
+.mic-error button:hover { color: var(--bone); }

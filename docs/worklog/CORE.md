@@ -2,6 +2,19 @@
 <!-- Written ONLY by the core lane (agent loop, router, watcher, companion, server). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-17 (later) — core · composer (touched web/, heads up)
+**Did:** Added dictation + file references to the composer at the user's request while
+the web lane was out of credits. New `web/src/lib/speech.ts` (Web Speech API, push-to-
+talk) and `web/src/components/Composer.tsx` -- the composer was lifted out of
+`Chronicle.tsx` into its own file; Chronicle now just renders `<Composer />`.
+**Affects web:** This is your lane, so: `@` in the composer (or the + button) opens a
+fuzzy workspace-file picker built from `fs.tree`, and inserts `@relative/path`. It
+references files rather than uploading them, which keeps the tools' workspace
+confinement meaningful. Mic is click-to-talk only, never background listening.
+**Needs from web:** nothing. Your `web/tests/test_ui.py` still passes unchanged.
+**Watch out:** the picker's Enter/Escape/arrows are handled inside the input, which the
+global shortcut handler already skips via `isTyping`, so they do not collide.
+
 ### 2026-10-17 — core · integration
 **Did:** Merged all three web-lane jobs into main. Cleared the gate: `scripts/test_tools.py`
 now asserts the six REQUIRED tools are present rather than an exact list, so optional tools
