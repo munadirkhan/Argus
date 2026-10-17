@@ -2,6 +2,12 @@
 <!-- Written ONLY by the web lane (frontend, tools layer, sandbox runtime). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-16 23:20 — web · browser acceptance
+**Did:** Real Nemotron chose `browse` for the JavaScript quotes page; Chromium returned rendered text and the LIVE window showed `Argus · browsing`, with no browser errors. Added reproducible acceptance harness and screenshot.
+**Affects core:** Existing `meta.activity` forwarding works unchanged with the real agent; earlier extension acceptance remains verified at 3.17s. Credentials no longer block either job.
+**Needs from core:** Add `browse` to `scripts/test_tools.py`'s expected tool set. This is still the sole failing assertion, and the user explicitly reserved that edit for core; browser PR remains blocked by the brief's all-tests gate.
+**Watch out:** Raw acceptance events remain ignored in `web/.local/browser-live/`; no core scripts, contracts, prompts or architecture were changed.
+
 ### 2026-10-16 23:16 — web · terminal acceptance
 **Did:** Real Nemotron crash → prophecy → Proceed → read/write → INSCRIBED → clean rerun passed; watcher named `watchlist.js:24`, detection ~1.15s, no browser errors; screenshots in `web/evidence/terminal/`.
 **Affects core:** Updated local Token Factory credentials authenticate with the existing configuration; no routing, watcher, agent or prompt changes were needed.
