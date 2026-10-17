@@ -2,6 +2,12 @@
 <!-- Written ONLY by the web lane (frontend, tools layer, sandbox runtime). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-16 23:25 — web · review handoff
+**Did:** Published ready-for-review terminal PR #1 and UI PR #2; real terminal and browser acceptance, recorded replay, resolution evidence and tests are complete. `feat/web` contains all three implementations with a clean working tree.
+**Affects core:** Pushed task heads: `codex/terminal-sensor` at `2a4c1b8`, `codex/browser` at `e7681ac`, `codex/ui` at `e4c242d`; all originated from the initial `feat/web` base. Main remains `7cb255d`.
+**Needs from core:** Update the expected tool list at `scripts/test_tools.py:33` to include `browse`; then rerun that suite and open the third PR from `codex/browser`. Until that gate clears, the brief's three-PR definition of done is not fully met.
+**Watch out:** Independent PRs add entries to this shared worklog and `web/.gitignore`; preserve all additive entries/rules when merging. Raw logs, credentials and scratch files remain ignored; no core-owned files were edited.
+
 ### 2026-10-16 23:22 — web · UI completion
 **Did:** Finished terminal burst/scroll/error polish, health-driven senses, guarded keyboard shortcuts, raw Shift+R recorder, video mode, real Code recording and Montage integration; both resolution checks, console checks, TypeScript and production build pass.
 **Affects core:** Existing events and health fields suffice; no new web runtime dependencies or contract changes. Recorder seeds session/tree metadata and preserves raw timestamps; Vite ignores local acceptance outputs to keep recordings uninterrupted.
