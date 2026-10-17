@@ -1,6 +1,15 @@
 import { useArgus } from "./store";
 import type { ArgusEvent } from "./types";
 import { SCENARIOS } from "../sim/scenarios";
+import { clearRecordingBaseline, recordFrame, recorderStatus, recordingActive, startRecording, stopRecording } from './recorder';
+
+recorderStatus(active => useArgus.getState().setRecording(active));
+
+export function toggleRecording() {
+  const state = useArgus.getState();
+  if (recordingActive()) stopRecording();
+  else if (state.source === 'live' && state.conn === 'live') startRecording();
+}
 
 export const API = (import.meta.env.VITE_ARGUS_API as string | undefined) ?? "http://localhost:7600";
 const WS_URL = API.replace(/^http/, "ws") + "/ws";
@@ -15,13 +24,15 @@ function clearReplay() {
   timers = [];
 }
 
-async function fetchHealth() {
+async function fetchHealth(socket: WebSocket) {
   try {
     const r = await fetch(API + "/health");
     const h = await r.json();
+    if (ws !== socket || wanted !== 'live') return;
     const st = useArgus.getState();
     if (typeof h.budget_usd === "number") st.setBudget(h.budget_usd);
     if (h.models) st.setModels(h.models);
+    if (Array.isArray(h.sensors)) st.setSensors(h.sensors.filter((s: unknown) => typeof s === 'string'));
   } catch {
     /* health is a nicety */
   }
@@ -29,6 +40,7 @@ async function fetchHealth() {
 
 function connectLive() {
   const st = useArgus.getState();
+  st.reset(); // Reconnect replays the core's history; rebuild without duplicate rows.
   st.setConn("connecting");
   try {
     ws = new WebSocket(WS_URL);
@@ -37,18 +49,24 @@ function connectLive() {
     scheduleRetry();
     return;
   }
+  const socket = ws;
   ws.onopen = () => {
+    if (ws !== socket || wanted !== 'live') return;
     useArgus.getState().setConn("live");
-    fetchHealth();
+    fetchHealth(socket);
   };
   ws.onmessage = (m) => {
+    if (ws !== socket || wanted !== 'live') return;
     try {
-      useArgus.getState().ingest(JSON.parse(m.data) as ArgusEvent);
+      const event = JSON.parse(m.data) as ArgusEvent;
+      recordFrame(m.data, event);
+      useArgus.getState().ingest(event);
     } catch {
       /* ignore malformed frames */
     }
   };
   ws.onclose = () => {
+    if (ws !== socket) return;
     ws = null;
     if (wanted === "live") {
       useArgus.getState().setConn("offline");
@@ -89,6 +107,8 @@ export function startReplay(id?: string) {
 }
 
 export function switchSource(source: "live" | "replay") {
+  if (source === 'live' && wanted === 'live' && ws) return;
+  if (source === 'replay') stopRecording();
   wanted = source;
   useArgus.getState().setSource(source);
   clearReplay();
@@ -104,6 +124,7 @@ export function switchSource(source: "live" | "replay") {
     }
     startReplay();
   } else {
+    clearRecordingBaseline();
     useArgus.getState().reset();
     if (!ws) connectLive();
   }

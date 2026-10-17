@@ -3,11 +3,12 @@
  * "markets" and "code" are scripted to show where Argus is headed: watching
  * the apps you work in, not just the files. They are labelled SIMULATED in the
  * UI, use illustrative figures, and Argus never trades -- it researches.
- * "research" is different: a recording of a real live run (see
+ * "research" and "code-recorded" are recordings of real live runs (see
  * scripts/record_replay.py), timing compressed, nothing invented.
  */
 import type { ArgusEvent, Tier } from "../lib/types";
 import recorded from "../../mock/recorded-research.json";
+import recordedCode from "../../mock/recorded-code.json";
 
 export type Timed = ArgusEvent & { t_offset_ms: number };
 export interface Scenario {
@@ -230,14 +231,22 @@ const code = script("cd", (s) => {
 
 /* ----------------------------------------------------------------- RESEARCH */
 const research = (recorded as Timed[]).map((e) => ({ ...e }));
+const codeRecorded = (recordedCode as Timed[]).map((e) => ({ ...e }));
 
 /* ------------------------------------------------------------------ MONTAGE */
 function chain(...parts: Timed[][]): Timed[] {
   const out: Timed[] = [];
   let offset = 0;
-  parts.forEach((p) => {
+  parts.forEach((p, index) => {
     const end = Math.max(...p.map((e) => e.t_offset_ms));
-    p.forEach((e) => out.push({ ...e, t_offset_ms: e.t_offset_ms + offset } as Timed));
+    // Independent recorded sessions reuse ids; scope them to their montage part.
+    const id = (value: string) => `montage_${index}_${value}`;
+    p.forEach((e) => out.push({
+      ...e, t_offset_ms: e.t_offset_ms + offset,
+      ...('id' in e ? { id: id(e.id) } : {}),
+      ...(e.type === 'agent.step' ? { plan_id: id(e.plan_id) } : {}),
+      ...(e.type === 'agent.plan' ? { steps: e.steps.map(step => ({ ...step, id: id(step.id) })) } : {}),
+    } as Timed));
     offset += end + 3500;
   });
   return out;
@@ -246,10 +255,11 @@ function chain(...parts: Timed[][]): Timed[] {
 export const SCENARIOS: Record<string, Scenario> = {
   montage: {
     id: "montage", name: "Montage", kind: "simulated",
-    blurb: "Markets, then code, then the recorded research run — back to back.",
-    events: chain(markets, code, research),
+    blurb: "Illustrative markets, then real recorded code and research runs.",
+    events: chain(markets, codeRecorded, research),
   },
   markets: { id: "markets", name: "Markets", kind: "simulated", blurb: "Argus watches a chart and preps an earnings brief.", events: markets },
   code: { id: "code", name: "Code", kind: "simulated", blurb: "Argus catches a crash and patches it.", events: code },
+  'code-recorded': { id: 'code-recorded', name: 'Code (recorded)', kind: 'recorded', blurb: 'A real crash, Proceed, automatic fix and clean rerun.', events: codeRecorded },
   research: { id: "research", name: "Research", kind: "recorded", blurb: "A real live run, recorded.", events: research },
 };

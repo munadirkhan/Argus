@@ -250,6 +250,7 @@ body {
 
 /* ---------- smaller screens (the in-app preview is 1280x720) ---------- */
 .col { overflow-y: auto; }
+.col > .panel:not(.archive), .col > .senses { flex-shrink: 0; }
 @media (max-width: 1500px) {
   .shell { grid-template-columns: 286px minmax(0, 1fr) 372px; gap: 12px 14px; padding: 12px 14px 14px; }
   .tier .model { font-size: 15.5px; }
@@ -349,9 +350,62 @@ body {
 .beam-dot { filter: drop-shadow(0 0 6px #ff8a2a); }
 @keyframes beam { to { stroke-dashoffset: -16; } }
 
-@media (max-width: 1350px) { .sight, .beam { display: none; } }
+@media (max-width: 1350px) {
+  .sight { width: 46%; max-width: 260px; top: 1%; }
+  .sight-bar { padding: 5px 7px; gap: 5px; }
+  .sight-bar .dots, .sight-bar .watching { display: none; }
+  .sight-body { padding: 6px 8px; }
+  .term, .browser .bl { font-size: 9px; }
+  .browser { max-height: 190px; overflow-y: auto; }
+}
 @media (max-height: 860px) { .tape { height: 22px; } .tape-item { height: 22px; font-size: 10px; } .candles { height: 84px; } .term { min-height: 90px; } }
 
 /* code artifacts in the archive */
 .scroll-doc pre { margin: 0 0 12px; padding: 12px 14px; background: rgba(0,0,0,.4); border: 1px solid var(--line); overflow: auto; }
 .scroll-doc pre code { background: none; padding: 0; font-size: 11.5px; line-height: 1.55; color: #e6dcc6; }
+
+/* Live senses and recording reuse the existing gold/amber HUD vocabulary. */
+.senses { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); background: rgba(7,5,6,.9); }
+.senses .label { width: 100%; font-size: 9px; }
+.sense { display: inline-flex; align-items: center; gap: 5px; color: var(--gold-dim); font-size: 9px; letter-spacing: .08em; transition: color .25s ease-out; }
+.sense.lit { color: var(--amber); }
+.senses-wait { color: var(--smoke); font-size: 10px; }
+.record-toggle { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); color: var(--gold-dim); padding: 6px 9px; font-size: 9px; letter-spacing: .12em; background: rgba(7,5,6,.7); cursor: pointer; white-space: nowrap; }
+.record-toggle.recording { color: var(--amber); border-color: var(--amber); }
+.record-toggle.recording .dot { background: var(--amber); }
+.record-toggle:disabled { opacity: .4; cursor: default; }
+kbd { font-family: var(--font-mono); font-size: .72em; letter-spacing: 0; opacity: .65; margin-left: 6px; }
+.composer-key { color: var(--gold-dim); font-size: 11px; }
+.terminal-output { max-height: min(33vh, 350px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.terminal-output .tl { overflow-wrap: anywhere; }
+.terminal-output .tl.arrived { animation: error-arrival .45s ease-out 1; }
+@keyframes error-arrival { from { background: rgba(236,90,44,.28); } to { background: transparent; } }
+.video-mode, .video-mode * { cursor: none !important; }
+.browser .url, .browser .bl { overflow-wrap: anywhere; }
+button:focus-visible, .terminal-output:focus-visible { outline: 1px solid var(--gold); outline-offset: 3px; }
+@media (max-height: 860px) {
+  .senses { padding: 7px 11px; gap: 5px 10px; }
+  .senses .label { width: auto; }
+  .sense { font-size: 8px; }
+  .terminal-output { max-height: 24vh; }
+}
+@media (max-width: 1350px) {
+  .shell { grid-template-columns: 254px minmax(0, 1fr) 302px; gap: 10px 12px; }
+  .header { grid-template-columns: auto 1fr auto; }
+  .header .controls { gap: 7px; }
+  .brand .sub { font-size: 8px; letter-spacing: .22em; }
+  .header .state { display: none; }
+  .controls { grid-column: 3; }
+  .scen { max-width: 475px; flex-wrap: wrap; }
+  .seg.scen button { font-size: 8px; padding: 4px 7px; }
+  .col .ph .meta { display: none; }
+  .tier { padding: 8px 10px; }
+  .tier .top { gap: 6px; }
+  .tier .numeral { width: 12px; font-size: 11px; }
+  .tier .role { font-size: 10px; letter-spacing: .14em; white-space: nowrap; }
+  .tier .status { font-size: 7.5px; letter-spacing: .06em; white-space: nowrap; gap: 4px; }
+  .tier .model, .tier .stats, .tier .note { margin-left: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .terminal-output .tl.arrived { animation: none; }
+}

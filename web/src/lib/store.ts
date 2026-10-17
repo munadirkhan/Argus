@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import type { ActivityEvent, ArgusEvent, Mood, Source, StepStatus, Tier } from "./types";
+import { terminalRows, type TerminalRow } from './terminal';
 
 export interface Sight extends ActivityEvent {
   at: number;
+  rows?: TerminalRow[];
 }
 export interface WireItem {
   id: number;
@@ -73,6 +75,11 @@ const DEFAULT_MODELS: Record<Tier, string> = {
 };
 
 interface State {
+  sensors: string[] | null;
+  senseAt: Partial<Record<Source, number>>;
+  recording: boolean;
+  setSensors: (names: string[]) => void;
+  setRecording: (active: boolean) => void;
   conn: "connecting" | "live" | "offline" | "replay";
   source: "live" | "replay";
   session: { runtime: string; status: string; cwd: string; label: string } | null;
@@ -111,6 +118,8 @@ let uid = 0;
 const nid = () => `e${++uid}`;
 
 const initial = () => ({
+  sensors: null,
+  senseAt: {} as Partial<Record<Source, number>>,
   session: null,
   entries: [] as Entry[],
   plans: {},
@@ -136,6 +145,9 @@ const initial = () => ({
 });
 
 export const useArgus = create<State>((set, get) => ({
+  recording: false,
+  setSensors: (sensors) => set({ sensors }),
+  setRecording: (recording) => set({ recording }),
   conn: "connecting",
   source: "live",
   budget: 10,
@@ -324,6 +336,7 @@ export const useArgus = create<State>((set, get) => ({
           : [];
         const patch: Partial<State> = { tree: { root: e.root, nodes: e.nodes }, touched };
         if (changed.length) {
+          patch.senseAt = { ...s.senseAt, files: now };
           const rel = (p: string) => p.split("\\").join("/").replace(e.root.split("\\").join("/") + "/", "");
           patch.sight = {
             ...s.sight,
@@ -344,9 +357,11 @@ export const useArgus = create<State>((set, get) => ({
       }
 
       case "activity": {
-        const sight = { ...s.sight, [e.source]: { ...e, at: now } };
+        const rows = e.source === 'terminal' ? terminalRows(s.sight.terminal?.rows ?? [], e.lines, now) : undefined;
+        const sight = { ...s.sight, [e.source]: { ...e, at: now, rows } };
         set({
           sight,
+          senseAt: { ...s.senseAt, [e.source]: now },
           focus: e.focus ? e.source : s.focus,
           wire: [...s.wire, wire(`${e.app.toUpperCase()} · ${e.title}`, e.lines?.some((l) => l.tone === "err") ? "ember" : "bone")].slice(-40),
         });
@@ -354,7 +369,10 @@ export const useArgus = create<State>((set, get) => ({
       }
 
       case "error":
-        set({ entries: [...s.entries, { kind: "error", id: nid(), message: e.message }] });
+        set({ entries: [...s.entries, { kind: "error", id: nid(), message: e.message }],
+          activeTier: null, busy: false,
+          tiers: Object.fromEntries(Object.entries(s.tiers).map(([key, tier]) => [key, { ...tier, active: false }])) as Record<Tier, TierState>,
+        });
         break;
     }
     const w = wireFor(e);
