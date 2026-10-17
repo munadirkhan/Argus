@@ -310,8 +310,8 @@ function refreshTray() {
   const root = coreRoot || workspace();
   tray.setToolTip(core || coreRoot ? `Argus — watching ${path.basename(root)}` : "Argus — core offline");
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Open Argus", accelerator: "CommandOrControl+Alt+A", click: openHub },
-    { label: "Talk to Argus", accelerator: "CommandOrControl+Alt+Space", click: talk },
+    { label: "Open Argus", ...(hotkeys.hub ? { accelerator: hotkeys.hub } : {}), click: openHub },
+    { label: "Talk to Argus", ...(hotkeys.talk ? { accelerator: hotkeys.talk } : {}), click: talk },
     { type: "separator" },
     { label: `Watching: ${root}`, enabled: false },
     { label: "Choose watched folder…", click: chooseFolder },
@@ -369,7 +369,23 @@ function createTray() {
   refreshTray();
 }
 
+/* --------------------------------------------------------------- hotkeys */
+const HUB_KEYS = ["CommandOrControl+Alt+A", "CommandOrControl+Shift+A", "CommandOrControl+Alt+H"];
+const TALK_KEYS = ["CommandOrControl+Alt+Space", "CommandOrControl+Alt+J", "CommandOrControl+Shift+Space"];
+const hotkeys = { hub: null, talk: null };
+
+function registerFirst(candidates, fn) {
+  for (const accel of candidates) {
+    try {
+      if (globalShortcut.register(accel, fn)) return accel;
+    } catch { /* malformed on this platform; try the next */ }
+    console.warn("[argus] shortcut taken by another app:", accel);
+  }
+  return null;
+}
+
 /* ------------------------------------------------------------------- ipc */
+ipcMain.handle("app:hotkeys", () => hotkeys);
 ipcMain.on("hub:open", openHub);
 
 ipcMain.handle("orb:expand", (_e, expanded) => {
@@ -426,10 +442,12 @@ app.whenReady().then(async () => {
   createOrb();
   createTray();
 
-  const keys = { "CommandOrControl+Alt+A": toggleHub, "CommandOrControl+Alt+Space": talk };
-  for (const [accel, fn] of Object.entries(keys)) {
-    if (!globalShortcut.register(accel, fn)) console.warn("[argus] shortcut taken by another app:", accel);
-  }
+  // Global keys can already belong to another app; take the first free one and
+  // tell the UI which, so every hint shows the key that actually works.
+  hotkeys.hub = registerFirst(HUB_KEYS, toggleHub);
+  hotkeys.talk = registerFirst(TALK_KEYS, talk);
+  console.log("[argus] hotkeys: hub=%s talk=%s", hotkeys.hub, hotkeys.talk);
+  refreshTray();
 
   if (!coreOk && !TEST) {
     dialog.showMessageBox({

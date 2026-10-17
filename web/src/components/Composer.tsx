@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { draft, release, upload, type Attachment } from "../lib/attach";
 import { speak } from "../lib/connection";
-import { desktop } from "../lib/desktop";
+import { desktop, hotkeys, keyLabel } from "../lib/desktop";
 import { bytes, relative } from "../lib/format";
 import { VIDEO_MODE } from "../lib/keyboard";
 import { useArgus } from "../lib/store";
@@ -15,7 +15,7 @@ import { EyeGlyph } from "./Ornament";
  *           reference a workspace file with @
  *  drop     drag files anywhere onto the hub
  *  paste    Ctrl+V a screenshot or files
- *  mic      push-to-talk, transcribed locally; Ctrl+Alt+Space works from any app
+ *  mic      push-to-talk, transcribed locally; the talk hotkey works from any app
  */
 
 const MAX_SUGGESTIONS = 8;
@@ -76,6 +76,8 @@ export default function Composer() {
   const ready = atts.filter((a) => a.status === "ready");
   const canSend = live && !busy && !uploading && (text.trim().length > 0 || ready.length > 0);
   const micOk = useMemo(() => voice.supported(), []);
+  const [talkKey, setTalkKey] = useState<string | null>(null);
+  useEffect(() => { void hotkeys().then((h) => setTalkKey(keyLabel(h.talk))); }, []);
 
   useEffect(() => voice.subscribe(setMic), []);
   useEffect(() => () => attsRef.current.forEach(release), []);
@@ -185,7 +187,7 @@ export default function Composer() {
     }
   };
 
-  // Global push-to-talk (Ctrl+Alt+Space) while the hub is in front: speak, and
+  // Global push-to-talk (the talk hotkey) while the hub is in front: speak, and
   // the request goes straight to Argus -- no reaching for the keyboard.
   useEffect(() => {
     if (!desktop) return;
@@ -402,7 +404,7 @@ export default function Composer() {
           style={{ "--level": mic.level } as React.CSSProperties}
           onClick={toggleMic}
           disabled={!live || busy || mic.phase === "transcribing"}
-          title={recording ? "Finish (esc cancels)" : desktop ? "Talk — or Ctrl+Alt+Space from any app" : "Talk"}
+          title={recording ? "Finish (esc cancels)" : talkKey ? `Talk — or ${talkKey} from any app` : "Talk"}
           aria-label={recording ? "Finish dictation" : "Start dictation"}
           aria-pressed={recording}
         >

@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Panoptes from "../scene/Panoptes";
 import { accept, dismiss, speak, switchSource } from "../lib/connection";
-import { desktop, type OrbSide } from "../lib/desktop";
+import { desktop, hotkeys, keyLabel, type OrbSide } from "../lib/desktop";
 import { moodOf, useArgus } from "../lib/store";
 import { voice, type VoiceState } from "../lib/voice";
 
@@ -33,6 +33,8 @@ export default function OrbApp() {
   const [reply, setReply] = useState<{ id: string; text: string; until: number } | null>(null);
   const [heard, setHeard] = useState<{ text: string; until: number } | null>(null);
   const [, tick] = useState(0);
+  const [talkKey, setTalkKey] = useState<string | null>(null);
+  useEffect(() => { void hotkeys().then((h) => setTalkKey(keyLabel(h.talk))); }, []);
 
   const mood = useArgus((s) => moodOf(s));
   const conn = useArgus((s) => s.conn);
@@ -92,7 +94,7 @@ export default function OrbApp() {
     setReply({ id: lastReply.id, text: plain(lastReply.text), until: Date.now() + REPLY_SECONDS * 1000 });
   }, [lastReply?.id]);
 
-  // Push-to-talk from anywhere: Ctrl+Alt+Space starts, again sends.
+  // Push-to-talk from anywhere: the talk hotkey starts, again sends.
   useEffect(() => {
     if (!desktop) return;
     return desktop.onVoiceToggle(async () => {
@@ -187,7 +189,7 @@ export default function OrbApp() {
                     <span key={i} style={{ height: `${12 + Math.abs(Math.sin(i * 1.7 + mic.seconds * 6)) * mic.level * 88}%` }} />
                   ))}
                 </div>
-                <div className="oc-hint">Ctrl+Alt+Space to send <button onClick={() => voice.cancel()}>cancel</button></div>
+                <div className="oc-hint">{talkKey ? `${talkKey} to send` : "Click the orb to finish"} <button onClick={() => voice.cancel()}>cancel</button></div>
               </>
             )}
             {card.kind === "transcribing" && <div className="oc-label">TRANSCRIBING ON THIS MACHINE…</div>}

@@ -19,6 +19,10 @@ not just while its tab is open.
 | `Ctrl+Alt+A` | Show / hide the hub |
 | `Ctrl+Alt+Space` | Talk to Argus — press, speak, press again to send |
 
+If another app already owns a key, Argus takes the next free one — hub:
+`Ctrl+Alt+A` → `Ctrl+Shift+A` → `Ctrl+Alt+H`; talk: `Ctrl+Alt+Space` → `Ctrl+Alt+J` →
+`Ctrl+Shift+Space`. The tray menu, the mic tooltip and the orb all show the key it got.
+
 ## Run it
 
 Windows: double-click **`Argus.cmd`** in the repo root. It installs and builds on

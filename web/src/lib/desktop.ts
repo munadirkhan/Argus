@@ -11,12 +11,28 @@ export interface DesktopBridge {
   orbDrag(phase: "start" | "end"): void;
   /** Grow the floating orb into orb + card, or shrink back. Resolves to the side the card opens on. */
   orbExpand(expanded: boolean): Promise<OrbSide>;
-  /** Fired by the global push-to-talk shortcut (Ctrl+Alt+Space). Returns an unsubscribe. */
+  /** Fired by the global push-to-talk hotkey. Returns an unsubscribe. */
   onVoiceToggle(cb: () => void): () => void;
   /** Fired when the orb's card side changes (orb dragged across the screen centre). */
   onOrbSide(cb: (side: OrbSide) => void): () => void;
   /** Fired when the floating orb window is shown or hidden. */
   onOrbVisible(cb: (visible: boolean) => void): () => void;
+  /** The global hotkeys that actually registered (another app may own the first choice). */
+  getHotkeys(): Promise<{ hub: string | null; talk: string | null }>;
+}
+
+/** "CommandOrControl+Alt+J" -> "Ctrl+Alt+J" (or ⌘ on macOS). */
+export function keyLabel(accel: string | null): string | null {
+  if (!accel) return null;
+  const mac = desktop?.platform === "darwin";
+  return accel.replace("CommandOrControl", mac ? "⌘" : "Ctrl").replace("Space", "Space");
+}
+
+let cached: Promise<{ hub: string | null; talk: string | null }> | null = null;
+export function hotkeys() {
+  if (!desktop) return Promise.resolve({ hub: null, talk: null });
+  cached ??= desktop.getHotkeys().catch(() => ({ hub: null, talk: null }));
+  return cached;
 }
 
 export const desktop: DesktopBridge | null =
