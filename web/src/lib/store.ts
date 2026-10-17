@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ActivityEvent, ArgusEvent, Mood, Source, StepStatus, Tier } from "./types";
+import type { ActivityEvent, ArgusEvent, Mood, SentAttachment, Source, StepStatus, Tier } from "./types";
 import { terminalRows, type TerminalRow } from './terminal';
 
 export interface Sight extends ActivityEvent {
@@ -51,7 +51,7 @@ export interface Artifact {
 }
 
 export type Entry =
-  | { kind: "message"; id: string; role: "user" | "assistant"; text: string }
+  | { kind: "message"; id: string; role: "user" | "assistant"; text: string; attachments?: SentAttachment[] }
   | { kind: "plan"; id: string }
   | { kind: "tool"; id: string }
   | { kind: "observation"; id: string }
@@ -215,7 +215,7 @@ export const useArgus = create<State>((set, get) => ({
 
       case "agent.message": {
         const existing = s.entries.findIndex((x) => x.kind === "message" && x.id === e.id);
-        const entry: Entry = { kind: "message", id: e.id, role: e.role, text: e.text };
+        const entry: Entry = { kind: "message", id: e.id, role: e.role, text: e.text, attachments: e.attachments };
         const entries =
           existing >= 0 ? s.entries.map((x, i) => (i === existing ? entry : x)) : [...s.entries, entry];
         const patch: Partial<State> = { entries };

@@ -400,10 +400,12 @@ class Agent:
         return brief((getattr(msg, "content", "") or "").strip()) or "Done."
 
     # --- the whole thing --------------------------------------------------
-    async def run(self, goal, display=None):
+    async def run(self, goal, display=None, attachments=None):
         """Handle one user request end to end. `display` is what the chat shows
-        as the user's message when it differs from the goal the model gets."""
-        await self.bus.emit(events.agent_message(self._nid("m"), "user", display or goal))
+        as the user's message when it differs from the goal the model gets;
+        `attachments` are files the user handed over, already in the workspace."""
+        await self.bus.emit(events.agent_message(
+            self._nid("m"), "user", display or goal, attachments=attachments))
         self.transcript.append({"role": "user", "content": goal})
 
         try:

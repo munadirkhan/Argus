@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
+  // Relative asset paths, so the desktop app can load the build straight from disk.
+  base: "./",
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173, strictPort: true,

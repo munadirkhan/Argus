@@ -9,7 +9,7 @@ Run:  python -m core.server            (or: uvicorn core.server:app --port 7600)
 from __future__ import annotations
 import asyncio, json, os, sys, time
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import events
@@ -18,6 +18,8 @@ from .bus import EventBus
 from .models import ModelRouter
 from .tools.registry import Registry
 from .watcher import Watcher, scan
+from . import attachments as attach_store, voice
+from .models import set_active
 from .sensors.registry import Sensors
 
 try:
@@ -60,6 +62,7 @@ class Session:
         # exact folder the watcher observes.
         os.environ["ARGUS_WATCH_ROOT"] = self.root
         self.agent = Agent(self.router, self.registry, self.bus, workspace=self.root)
+        set_active(self.router)          # tools that need a model (vision) spend through it
         self.watcher = Watcher(self.router, self.bus, self.root,
                                interval=WATCH_INTERVAL, cooldown=WATCH_COOLDOWN)
         self.sensors = Sensors()
@@ -73,6 +76,11 @@ class Session:
         await self.router.resolve()
         print("[argus] model routing:\n" + self.router.describe(), flush=True)
         print("[argus] sensors: %s" % (", ".join(self.sensors.names) or "(none)"), flush=True)
+        print("[argus] vision: %s" % (self.router.vision[0] if self.router.vision else "(none)"),
+              flush=True)
+        if voice.available() and not USE_FAKE:
+            # Load the speech model in the background so the first command is fast.
+            asyncio.get_running_loop().run_in_executor(None, voice.warm)
         self.ready = True
         await self.bus.emit(events.session_state(
             self.runtime, "connected", self.root, self.label))
@@ -105,8 +113,11 @@ class Session:
         kind = msg.get("type")
         if kind == "user.message":
             text = str(msg.get("text", "")).strip()
-            if text:
-                asyncio.create_task(self._run_agent(text))
+            atts = self._known_attachments(msg.get("attachments"))
+            if text or atts:
+                shown = text or "Have a look at %s." % ", ".join(a["name"] for a in atts)
+                goal = shown + attach_store.describe_for_agent(atts)
+                asyncio.create_task(self._run_agent(goal, display=shown, attachments=atts))
         elif kind == "user.dismiss":
             obs_id = str(msg.get("id", ""))
             if obs_id:
@@ -126,7 +137,24 @@ class Session:
         else:
             await self.bus.emit(events.error("unknown client message: %r" % kind))
 
-    async def _run_agent(self, text: str, display: str | None = None) -> None:
+    def _known_attachments(self, raw) -> list[dict]:
+        """Only accept attachments that really exist in this workspace's
+        attachment folder -- a client can't point the agent anywhere else."""
+        out = []
+        base = os.path.realpath(os.path.join(self.root, attach_store.SUBDIR))
+        for a in (raw or [])[:20]:
+            if not isinstance(a, dict):
+                continue
+            rel = str(a.get("path", "")).replace("\\", "/")
+            full = os.path.realpath(os.path.join(self.root, rel))
+            if os.path.dirname(full) == base and os.path.isfile(full):
+                name = os.path.basename(full)
+                out.append({"path": rel, "name": name, "bytes": os.path.getsize(full),
+                            "kind": attach_store.kind_of(name)})
+        return out
+
+    async def _run_agent(self, text: str, display: str | None = None,
+                         attachments: list[dict] | None = None) -> None:
         if self._agent_lock.locked():
             await self.bus.emit(events.error(
                 "Still working on the previous request.", fatal=False))
@@ -135,7 +163,7 @@ class Session:
             was_enabled = self.watcher.enabled
             self.watcher.enabled = False          # do not interrupt itself
             try:
-                await self.agent.run(text, display=display)
+                await self.agent.run(text, display=display, attachments=attachments)
             except Exception as e:
                 await self.bus.emit(events.error(
                     "%s: %s" % (type(e).__name__, e), fatal=False))
@@ -174,6 +202,8 @@ async def health() -> dict:
         "root": session.root,
         "tools": sorted(session.registry.tools),
         "sensors": session.sensors.names,
+        "voice": voice.available(),
+        "vision": session.router.vision[0] if session.router.vision else None,
         "models": {t: session.router.for_tier(t).model_id
                    for t in ("watcher", "planner", "executor")},
         "spend_usd": round(session.router.spend.total_usd, 6),
@@ -197,6 +227,33 @@ async def artifact(path: str) -> dict:
     with open(full, encoding="utf-8", errors="replace") as f:
         text = f.read(400_000)
     return {"ok": True, "path": full.replace("\\", "/"), "text": text}
+
+
+@app.post("/attach")
+async def attach(request: Request, name: str = "attachment") -> dict:
+    """Copy a file the user chose into <workspace>/.argus/attachments/.
+    Body is the raw file bytes; ?name= is the original filename."""
+    data = await request.body()
+    try:
+        rec = await asyncio.to_thread(attach_store.save, session.root, name, data)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    except OSError as e:
+        return {"ok": False, "error": "Could not save the file (%s)" % e.strerror}
+    return {"ok": True, **rec}
+
+
+@app.post("/transcribe")
+async def transcribe(request: Request) -> dict:
+    """Speech to text, on this machine. Body is the recorded audio."""
+    data = await request.body()
+    try:
+        out = await voice.transcribe(data, request.headers.get("content-type", "audio/webm"))
+    except voice.VoiceUnavailable as e:
+        return {"ok": False, "error": str(e)}
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, **out}
 
 
 @app.post("/sense/{name}")

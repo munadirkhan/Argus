@@ -21,7 +21,8 @@ export type ArgusEvent = Envelope &
         suggestion: string;
         dismissible: boolean;
       }
-    | { type: "agent.message"; id: string; role: "user" | "assistant"; text: string; streaming: boolean; done: boolean }
+    | { type: "agent.message"; id: string; role: "user" | "assistant"; text: string; streaming: boolean; done: boolean;
+        attachments?: SentAttachment[] }
     | { type: "agent.plan"; id: string; steps: { id: string; title: string; status: StepStatus }[] }
     | { type: "agent.step"; plan_id: string; id: string; status: StepStatus }
     | { type: "agent.thinking"; tier: Tier; model: string; note: string }
@@ -56,6 +57,14 @@ export interface ActivityEvent {
   errorLine?: number; // editor: highlight this line (0-based index into lines)
   startLine?: number; // editor: number of the first line shown
   focus?: boolean; // the eyes should turn to it
+}
+
+/** A file the user attached to a message, as the core stored it. */
+export interface SentAttachment {
+  path: string;
+  name: string;
+  bytes: number;
+  kind: "image" | "pdf" | "file";
 }
 
 export type Mood = "idle" | "observe" | "deliberate" | "act" | "gaze";

@@ -114,6 +114,15 @@ changes via `fs.tree`.
 
 ```json
 { "type":"user.message", "text":"summarize what I'm working on" }
+{ "type":"user.message", "text":"read this", "attachments":[{"path":".argus/attachments/report.pdf"}] }   // additive
 { "type":"user.dismiss", "id":"obs_7" }
 { "type":"user.accept", "id":"obs_7" }   // run what the watcher offered (additive)
 ```
+
+### Attachments (additive, 2026-10-18)
+Files are uploaded first with `POST /attach?name=<file>` (raw body) and land in
+`<workspace>/.argus/attachments/`. A `user.message` may then carry
+`attachments: [{path}]`; the server accepts only paths that really exist in that
+folder. The echoed user `agent.message` carries `attachments: [{path,name,bytes,kind}]`
+(`kind`: `image` | `pdf` | `file`). Voice: `POST /transcribe` (raw audio body) →
+`{ok, text, ms}`, transcribed locally.

@@ -1,4 +1,4 @@
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Grid, Sparkles } from "@react-three/drei";
 import { Bloom, EffectComposer, Noise, Vignette } from "@react-three/postprocessing";
 import { useEffect, useMemo, useRef } from "react";
@@ -78,7 +78,7 @@ function useHaloTexture() {
   }, []);
 }
 
-function Orb({ mood }: { mood: Mood }) {
+function Orb({ mood, compact = false }: { mood: Mood; compact?: boolean }) {
   const orb = useRef<THREE.Group>(null!);
   const rings = useRef<THREE.Group[]>([]);
   const eyes = useRef<(THREE.Group | null)[]>([]);
@@ -152,7 +152,7 @@ function Orb({ mood }: { mood: Mood }) {
   useFrame((st, dt) => {
     dt = Math.min(dt, 0.05);
     const t = st.clock.elapsedTime;
-    const goal = MOODS[mood];
+    const goal = compact && mood === "idle" ? COMPACT_IDLE : MOODS[mood];
     const cur = p.current;
     const k = 1 - Math.exp(-dt * 2.2);
     (Object.keys(goal) as (keyof Params)[]).forEach((key) => (cur[key] += (goal[key] - cur[key]) * k));
@@ -286,7 +286,22 @@ function Halo() {
 
 const ORB_Y = 0.95;
 
-function CameraRig({ mood }: { mood: Mood }) {
+// Floating orb at rest: eyes drift on their own, since there is no cursor in
+// its tiny window to follow.
+const COMPACT_IDLE: Params = { ...MOODS.idle, saccade: 0.35, follow: 0.45, glow: 1.25 };
+
+/** Render at a fixed rate instead of every display frame: the floating orb sits
+ *  over games and video all day and should cost almost nothing. */
+function Ticker({ fps }: { fps: number }) {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    const id = window.setInterval(() => invalidate(), 1000 / fps);
+    return () => window.clearInterval(id);
+  }, [fps, invalidate]);
+  return null;
+}
+
+function CameraRig({ mood, compact = false }: { mood: Mood; compact?: boolean }) {
   const zoom = useRef(1);
   useFrame((st, dt) => {
     const cam = st.camera as THREE.PerspectiveCamera;
@@ -296,20 +311,23 @@ function CameraRig({ mood }: { mood: Mood }) {
 
     // Lean in a little when Argus speaks.
     zoom.current += ((mood === "gaze" ? 1.1 : 1) - zoom.current) * (1 - Math.exp(-dt * 1.2));
-    const rpx = (frame.r || H * 0.3) * zoom.current;
+    // The floating orb frames itself to its own small window.
+    const baseR = compact ? Math.min(W, H) * 0.27 : frame.r || H * 0.3;
+    const rpx = baseR * zoom.current;
     const tanH = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
     const dist = R / ((rpx / (H / 2)) * tanH);
 
-    const tx = pointer.x * 0.06 * dist;
-    const ty = ORB_Y + 0.12 * dist + pointer.y * 0.03 * dist;
+    const par = compact ? 0 : 1;
+    const tx = pointer.x * 0.06 * dist * par;
+    const ty = ORB_Y + 0.12 * dist + pointer.y * 0.03 * dist * par;
     cam.position.x += (tx - cam.position.x) * k;
     cam.position.y += (ty - cam.position.y) * k;
     cam.position.z += (dist - cam.position.z) * k;
     cam.lookAt(0, ORB_Y, 0);
 
     // Shift the projection so the orb lands in the layout's orb zone.
-    const cx = frame.r ? frame.cx : W / 2;
-    const cy = frame.r ? frame.cy : H * 0.35;
+    const cx = compact ? W / 2 : frame.r ? frame.cx : W / 2;
+    const cy = compact ? H / 2 : frame.r ? frame.cy : H * 0.35;
     cam.setViewOffset(W, H, W / 2 - cx, H / 2 - cy, W, H);
     cam.updateProjectionMatrix();
   });
@@ -334,20 +352,20 @@ function BloomDriver({ mood }: { mood: Mood }) {
   );
 }
 
-function Scene() {
+function Scene({ compact = false }: { compact?: boolean }) {
   const mood = useArgus((s) => moodOf(s));
   return (
     <>
-      <color attach="background" args={["#050407"]} />
+      {!compact && <color attach="background" args={["#050407"]} />}
       <ambientLight intensity={0.22} color="#ffd9b0" />
       <directionalLight position={[2.5, 4, 6]} intensity={1.5} color={BONE} />
       <pointLight position={[0, 1.2, -3.2]} intensity={40} distance={12} color={AMBER} />
       <pointLight position={[-4, -1, 2]} intensity={6} distance={10} color="#8a3a12" />
-      <Halo />
+      {!compact && <Halo />}
       <group>
-        <Orb mood={mood} />
+        <Orb mood={mood} compact={compact} />
       </group>
-      <Grid
+      {!compact && <Grid
         position={[0, -1.45, 0]}
         args={[40, 40]}
         cellSize={0.5}
@@ -359,26 +377,29 @@ function Scene() {
         fadeDistance={24}
         fadeStrength={1.7}
         infiniteGrid
-      />
-      <Sparkles count={90} scale={[12, 6, 8]} position={[0, 1, -1]} size={2.2} speed={0.25} color="#ffb370" opacity={0.55} />
-      <CameraRig mood={mood} />
-      <BloomDriver mood={mood} />
+      />}
+      {!compact && <Sparkles count={90} scale={[12, 6, 8]} position={[0, 1, -1]} size={2.2} speed={0.25} color="#ffb370" opacity={0.55} />}
+      <CameraRig mood={mood} compact={compact} />
+      {compact ? <Ticker fps={30} /> : <BloomDriver mood={mood} />}
     </>
   );
 }
 
-export default function Panoptes() {
+export default function Panoptes({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
-    document.body.style.background = "#050407";
-  }, []);
+    if (!compact) document.body.style.background = "#050407";
+  }, [compact]);
   return (
-    <div className="panoptes-canvas" aria-hidden>
+    <div className={compact ? "panoptes-canvas compact" : "panoptes-canvas"} aria-hidden>
       <Canvas
-        dpr={[1, 1.6]}
+        dpr={compact ? [1, 2] : [1, 1.6]}
+        frameloop={compact ? "demand" : "always"}
         camera={{ position: [0, 0.75, 7.4], fov: 38 }}
-        gl={{ antialias: false, powerPreference: "high-performance" }}
+        gl={compact
+          ? { alpha: true, antialias: true, powerPreference: "low-power" }
+          : { antialias: false, powerPreference: "high-performance" }}
       >
-        <Scene />
+        <Scene compact={compact} />
       </Canvas>
     </div>
   );

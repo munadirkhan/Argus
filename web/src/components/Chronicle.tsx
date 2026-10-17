@@ -102,6 +102,15 @@ function Row({ e }: { e: Entry }) {
         <div className="msg-user">
           <div className="who">YOU</div>
           <div className="text">{e.text}</div>
+          {e.attachments?.length ? (
+            <div className="sent-atts">
+              {e.attachments.map((a) => (
+                <span key={a.path} className={`sent-att ${a.kind}`} title={a.path}>
+                  <i>{a.kind === "image" ? "IMG" : a.kind === "pdf" ? "PDF" : "FILE"}</i>{a.name}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="msg-argus">

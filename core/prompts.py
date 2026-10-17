@@ -19,6 +19,7 @@ Break the user's request into 2-4 concrete, ordered steps. Each step must be doa
 Rules:
 - Steps are concrete actions, not intentions. Two good steps beat five timid ones.
 - If the request involves the user's files, the FIRST step reads them (read_file), so later searches check what they actually say rather than guesses about it.
+- If the user attached files, the first step reads every one of them: read_file for text, code and PDFs, view_image for images and screenshots.
 - If there is an empty or new document the work belongs in (e.g. an empty notes.md), the last step writes it -- even if the request does not say so.
 - If it needs current or external information, a step searches the web.
 - The user's own material is often dated. If it carries a date, makes claims about what exists or what something costs, or lists open questions or things to check, a step verifies those against current sources with tavily_search. The user wants what is true now -- not a tidier copy of what they already have.

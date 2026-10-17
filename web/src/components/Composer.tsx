@@ -1,29 +1,32 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { draft, release, upload, type Attachment } from "../lib/attach";
 import { speak } from "../lib/connection";
+import { desktop } from "../lib/desktop";
 import { bytes, relative } from "../lib/format";
 import { VIDEO_MODE } from "../lib/keyboard";
-import { dictation, speechSupported, type SpeechState } from "../lib/speech";
 import { useArgus } from "../lib/store";
+import { voice, type VoiceState } from "../lib/voice";
 import { EyeGlyph } from "./Ornament";
 
-/* The composer: type, dictate, or reference a workspace file with @.
+/* The composer: type, talk, attach.
  *
- * Attaching means referencing, not uploading. ARGUS already reads files
- * itself, and its file tools are confined to the workspace -- so "@notes.md"
- * hands it a path it can open, instead of a copy it cannot verify. That keeps
- * the confinement guarantee intact and works for a 200MB PDF.
+ *  + menu   attach files from anywhere (copied into the workspace), or
+ *           reference a workspace file with @
+ *  drop     drag files anywhere onto the hub
+ *  paste    Ctrl+V a screenshot or files
+ *  mic      push-to-talk, transcribed locally; Ctrl+Alt+Space works from any app
  */
 
 const MAX_SUGGESTIONS = 8;
 
-interface Entry {
+interface WsFile {
   path: string;
   rel: string;
   bytes: number;
 }
 
-/** Subsequence match, so "wljs" finds "watchlist.js". Returns null if no match. */
+/** Subsequence match, so "wljs" finds "watchlist.js". Null when it can't match. */
 function score(rel: string, query: string): number | null {
   if (!query) return 0;
   const hay = rel.toLowerCase();
@@ -43,13 +46,18 @@ function score(rel: string, query: string): number | null {
   return gaps;
 }
 
+function hasFiles(e: DragEvent | React.DragEvent) {
+  return Array.from(e.dataTransfer?.types ?? []).includes("Files");
+}
+
 export default function Composer() {
   const [text, setText] = useState("");
   const [picker, setPicker] = useState<{ query: string; from: number } | null>(null);
   const [active, setActive] = useState(0);
-  const [speech, setSpeech] = useState<SpeechState>({
-    listening: false, final: "", interim: "", error: null,
-  });
+  const [menu, setMenu] = useState(false);
+  const [atts, setAtts] = useState<Attachment[]>([]);
+  const [dropping, setDropping] = useState(false);
+  const [mic, setMic] = useState<VoiceState>({ phase: "idle", level: 0, seconds: 0, error: null });
 
   const busy = useArgus((s) => s.busy);
   const conn = useArgus((s) => s.conn);
@@ -57,21 +65,146 @@ export default function Composer() {
   const note = useArgus((s) => (s.activeTier ? s.tiers[s.activeTier].note : ""));
 
   const input = useRef<HTMLInputElement>(null);
+  const filesInput = useRef<HTMLInputElement>(null);
+  const textRef = useRef(text);
+  textRef.current = text;
+  const attsRef = useRef(atts);
+  attsRef.current = atts;
+
   const live = conn === "live";
-  const canSend = live && !busy && text.trim().length > 0;
-  const mic = useMemo(speechSupported, []);
+  const uploading = atts.some((a) => a.status === "uploading");
+  const ready = atts.filter((a) => a.status === "ready");
+  const canSend = live && !busy && !uploading && (text.trim().length > 0 || ready.length > 0);
+  const micOk = useMemo(() => voice.supported(), []);
 
+  useEffect(() => voice.subscribe(setMic), []);
+  useEffect(() => () => attsRef.current.forEach(release), []);
+
+  /* ---------------- attachments ---------------- */
+  const addFiles = useCallback(
+    (list: FileList | File[]) => {
+      if (!live) return;
+      const files = Array.from(list).slice(0, 10);
+      if (!files.length) return;
+      const drafts = files.map(draft);
+      setAtts((cur) => [...cur, ...drafts]);
+      files.forEach((file, i) => {
+        void upload(file, drafts[i]).then((patch) =>
+          setAtts((cur) => cur.map((a) => (a.id === drafts[i].id ? { ...a, ...patch } : a)))
+        );
+      });
+      input.current?.focus();
+    },
+    [live]
+  );
+
+  const removeAtt = (id: string) =>
+    setAtts((cur) => {
+      const gone = cur.find((a) => a.id === id);
+      if (gone) release(gone);
+      return cur.filter((a) => a.id !== id);
+    });
+
+  // Drop files anywhere on the hub.
   useEffect(() => {
-    const off = dictation.subscribe(setSpeech);
-    return () => { off(); };
-  }, []);
+    let depth = 0;
+    const enter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth++;
+      setDropping(true);
+    };
+    const over = (e: DragEvent) => hasFiles(e) && e.preventDefault();
+    const leave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth = Math.max(0, depth - 1);
+      if (!depth) setDropping(false);
+    };
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth = 0;
+      setDropping(false);
+      if (e.dataTransfer?.files.length) addFiles(e.dataTransfer.files);
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, [addFiles]);
 
-  // While dictating, the box mirrors what has been heard so far.
+  /* ---------------- sending ---------------- */
+  const send = useCallback(
+    (raw: string) => {
+      const body = raw.trim();
+      const sent = attsRef.current.filter((a) => a.status === "ready" && a.path);
+      if (!live || busy || attsRef.current.some((a) => a.status === "uploading")) return false;
+      if (!body && !sent.length) return false;
+      const ok = speak(
+        body,
+        sent.map((a) => ({ path: a.path!, name: a.name, bytes: a.bytes, kind: a.kind }))
+      );
+      if (ok) {
+        setText("");
+        setPicker(null);
+        attsRef.current.forEach(release);
+        setAtts([]);
+      }
+      return ok;
+    },
+    [live, busy]
+  );
+
+  const submit = () => {
+    if (canSend) send(text);
+  };
+
+  /* ---------------- voice ---------------- */
+  const appendHeard = (heard: string) => {
+    if (!heard) return;
+    setText((cur) => (cur.trim() ? `${cur.replace(/\s+$/, "")} ${heard}` : heard));
+    requestAnimationFrame(() => {
+      const el = input.current;
+      el?.focus();
+      el?.setSelectionRange(el.value.length, el.value.length);
+    });
+  };
+
+  const toggleMic = async () => {
+    if (!live || busy) return;
+    if (mic.phase === "recording") appendHeard(await voice.stop());
+    else if (mic.phase === "idle") {
+      voice.clearError();
+      await voice.start();
+    }
+  };
+
+  // Global push-to-talk (Ctrl+Alt+Space) while the hub is in front: speak, and
+  // the request goes straight to Argus -- no reaching for the keyboard.
   useEffect(() => {
-    if (speech.listening) setText(dictation.text());
-  }, [speech.listening, speech.final, speech.interim]);
+    if (!desktop) return;
+    return desktop.onVoiceToggle(async () => {
+      const st = useArgus.getState();
+      if (st.conn !== "live" || st.busy) return;
+      if (voice.phase === "recording") {
+        const heard = await voice.stop();
+        const full = [textRef.current.trim(), heard].filter(Boolean).join(" ");
+        if (full) send(full);
+      } else if (voice.phase === "idle") {
+        voice.clearError();
+        await voice.start();
+      }
+    });
+  }, [send]);
 
-  const files: Entry[] = useMemo(
+  /* ---------------- @ workspace references ---------------- */
+  const files: WsFile[] = useMemo(
     () =>
       tree.nodes
         .filter((n) => !n.dir)
@@ -83,7 +216,7 @@ export default function Composer() {
     if (!picker) return [];
     return files
       .map((f) => ({ f, s: score(f.rel, picker.query) }))
-      .filter((m): m is { f: Entry; s: number } => m.s !== null)
+      .filter((m): m is { f: WsFile; s: number } => m.s !== null)
       .sort((a, b) => a.s - b.s || a.f.rel.length - b.f.rel.length)
       .slice(0, MAX_SUGGESTIONS)
       .map((m) => m.f);
@@ -91,15 +224,11 @@ export default function Composer() {
 
   useEffect(() => setActive(0), [picker?.query]);
 
-  const closePicker = () => setPicker(null);
-
-  /** Rewrite the @token under the cursor into a real path. */
-  const choose = (f: Entry) => {
+  const choose = (f: WsFile) => {
     if (!picker) return;
     const after = text.slice(picker.from + 1 + picker.query.length);
-    const next = `${text.slice(0, picker.from)}@${f.rel} ${after.replace(/^\s+/, "")}`;
-    setText(next);
-    closePicker();
+    setText(`${text.slice(0, picker.from)}@${f.rel} ${after.replace(/^\s+/, "")}`);
+    setPicker(null);
     requestAnimationFrame(() => {
       const caret = picker.from + f.rel.length + 2;
       input.current?.focus();
@@ -109,7 +238,6 @@ export default function Composer() {
 
   const onChange = (value: string, caret: number) => {
     setText(value);
-    // An @ that starts a word, with no space since, opens the picker.
     const upto = value.slice(0, caret);
     const at = upto.lastIndexOf("@");
     const token = at >= 0 ? upto.slice(at + 1) : "";
@@ -117,42 +245,21 @@ export default function Composer() {
     setPicker(at >= 0 && startsWord && !/\s/.test(token) ? { query: token, from: at } : null);
   };
 
-  const openPicker = () => {
-    if (!live || busy) return;
+  const startReference = () => {
+    setMenu(false);
     const el = input.current;
     const caret = el?.selectionStart ?? text.length;
-    const needsSpace = caret > 0 && !/\s$/.test(text.slice(0, caret));
-    const insert = (needsSpace ? " " : "") + "@";
-    const next = text.slice(0, caret) + insert + text.slice(caret);
-    setText(next);
-    setPicker({ query: "", from: caret + insert.length - 1 });
+    const pad = caret > 0 && !/\s$/.test(text.slice(0, caret)) ? " " : "";
+    setText(text.slice(0, caret) + pad + "@" + text.slice(caret));
+    setPicker({ query: "", from: caret + pad.length });
     requestAnimationFrame(() => {
       el?.focus();
-      const pos = caret + insert.length;
+      const pos = caret + pad.length + 1;
       el?.setSelectionRange(pos, pos);
     });
   };
 
-  const toggleMic = () => {
-    if (!live || busy) return;
-    if (speech.listening) dictation.stop();
-    else {
-      dictation.clearError();
-      dictation.start(text);
-      input.current?.focus();
-    }
-  };
-
-  const submit = () => {
-    if (!canSend) return;
-    if (speech.listening) dictation.stop();
-    if (speak(text.trim())) {
-      dictation.cancel();
-      setText("");
-      closePicker();
-    }
-  };
-
+  /* ---------------- keys ---------------- */
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (picker && matches.length) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -167,74 +274,111 @@ export default function Composer() {
       }
     }
     if (e.key === "Escape") {
-      if (picker) { e.preventDefault(); closePicker(); return; }
-      if (speech.listening) { e.preventDefault(); dictation.stop(); return; }
+      if (picker) return e.preventDefault(), setPicker(null);
+      if (menu) return e.preventDefault(), setMenu(false);
+      if (mic.phase === "recording") return e.preventDefault(), voice.cancel();
     }
+    if (e.key === "Backspace" && !text && atts.length) removeAtt(atts[atts.length - 1].id);
     if (e.key === "Enter") submit();
   };
 
+  const onPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    if (e.clipboardData.files.length) {
+      e.preventDefault();
+      addFiles(e.clipboardData.files);
+    }
+  };
+
+  const recording = mic.phase === "recording";
   const placeholder = VIDEO_MODE
     ? ""
     : !live
       ? "Argus is not connected — simulated sessions are read-only"
       : busy
         ? `Argus is at work${note ? ` — ${note.toLowerCase()}` : ""}…`
-        : speech.listening
-          ? "Listening…"
-          : "Speak, and Argus will act…   @ for a file";
+        : recording
+          ? `Listening… ${mic.seconds.toFixed(0)}s — click the mic to finish`
+          : mic.phase === "transcribing"
+            ? "Transcribing…"
+            : "Speak, and Argus will act…   @ for a file · drop or paste to attach";
 
   return (
-    <div className={`composer ${speech.listening ? "listening" : ""}`}>
+    <div className={`composer ${recording ? "listening" : ""}`}>
+      <AnimatePresence>
+        {dropping && (
+          <motion.div className="drop-veil" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="drop-card">
+              <EyeGlyph size={48} lit />
+              <div className="voice">Hand it to Argus.</div>
+              <div className="mono-dim">Dropped files are copied into the workspace for Argus to read.</div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {picker && (
-          <motion.div
-            className="picker"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.14 }}
-          >
+          <motion.div className="picker" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.14 }}>
             <div className="picker-head">
               <span className="label">WORKSPACE</span>
-              <span className="mono-dim">
-                {matches.length ? "↑↓ choose · ⏎ insert · esc close" : "no file matches"}
-              </span>
+              <span className="mono-dim">{matches.length ? "↑↓ choose · ⏎ insert · esc close" : "no file matches"}</span>
             </div>
             {matches.map((f, i) => (
-              <button
-                key={f.path}
-                className={`picker-row ${i === active ? "on" : ""}`}
-                onMouseEnter={() => setActive(i)}
-                onMouseDown={(e) => { e.preventDefault(); choose(f); }}
-              >
+              <button key={f.path} className={`picker-row ${i === active ? "on" : ""}`}
+                onMouseEnter={() => setActive(i)} onMouseDown={(e) => { e.preventDefault(); choose(f); }}>
                 <span className="pf">{f.rel}</span>
                 <span className="pb">{bytes(f.bytes)}</span>
               </button>
             ))}
           </motion.div>
         )}
+        {menu && !picker && (
+          <motion.div className="attach-menu" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.14 }}>
+            <button onMouseDown={(e) => { e.preventDefault(); setMenu(false); filesInput.current?.click(); }}>
+              <span className="mi">⇪</span>
+              <span><b>Attach files</b><i>from anywhere on this computer</i></span>
+            </button>
+            <button onMouseDown={(e) => { e.preventDefault(); startReference(); }}>
+              <span className="mi">@</span>
+              <span><b>Reference a workspace file</b><i>Argus opens it in place</i></span>
+            </button>
+            <div className="attach-hint">or drag files onto Argus · Ctrl+V pastes screenshots</div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
-      {speech.error && (
+      {mic.error && (
         <div className="mic-error" role="status">
-          {speech.error}
-          <button onClick={() => dictation.clearError()} aria-label="Dismiss">×</button>
+          {mic.error}
+          <button onClick={() => voice.clearError()} aria-label="Dismiss">×</button>
         </div>
       )}
 
-      <EyeGlyph size={20} lit={busy || speech.listening} />
+      {atts.length > 0 && (
+        <div className="att-row">
+          {atts.map((a) => (
+            <div key={a.id} className={`att-chip ${a.status} ${a.kind}`} title={a.error || a.path || a.name}>
+              {a.preview ? <img src={a.preview} alt="" /> : <i>{a.kind === "pdf" ? "PDF" : "FILE"}</i>}
+              <span className="an">{a.name}</span>
+              <span className="ab">{a.status === "uploading" ? "…" : a.status === "error" ? a.error : bytes(a.bytes)}</span>
+              <button onClick={() => removeAtt(a.id)} aria-label={`Remove ${a.name}`}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <button
-        className="composer-btn"
-        onClick={openPicker}
-        disabled={!live || busy}
-        title="Reference a file from the workspace (@)"
-        aria-label="Reference a workspace file"
-      >
+      <EyeGlyph size={20} lit={busy || recording} />
+
+      <button className={`composer-btn ${menu ? "open" : ""}`} onClick={() => setMenu((m) => !m)}
+        disabled={!live || busy} title="Attach or reference files" aria-label="Attach files" aria-expanded={menu}>
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden>
           <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
       </button>
+      <input ref={filesInput} type="file" multiple hidden
+        onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} />
 
       <input
         id="argus-composer"
@@ -244,32 +388,33 @@ export default function Composer() {
         value={text}
         onChange={(e) => onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
         onKeyDown={onKeyDown}
-        onBlur={() => window.setTimeout(closePicker, 120)}
+        onPaste={onPaste}
+        onBlur={() => window.setTimeout(() => { setPicker(null); setMenu(false); }, 120)}
         placeholder={placeholder}
         disabled={!live || busy}
       />
 
-      {!picker && <kbd className="composer-key" title="Focus composer">/</kbd>}
+      {!picker && !recording && <kbd className="composer-key" title="Focus composer">/</kbd>}
 
-      {mic && (
+      {micOk && (
         <button
-          className={`composer-btn mic ${speech.listening ? "on" : ""}`}
+          className={`composer-btn mic ${recording ? "on" : ""} ${mic.phase === "transcribing" ? "working" : ""}`}
+          style={{ "--level": mic.level } as React.CSSProperties}
           onClick={toggleMic}
-          disabled={!live || busy}
-          title={speech.listening ? "Stop dictation (esc)" : "Dictate"}
-          aria-label={speech.listening ? "Stop dictation" : "Start dictation"}
-          aria-pressed={speech.listening}
+          disabled={!live || busy || mic.phase === "transcribing"}
+          title={recording ? "Finish (esc cancels)" : desktop ? "Talk — or Ctrl+Alt+Space from any app" : "Talk"}
+          aria-label={recording ? "Finish dictation" : "Start dictation"}
+          aria-pressed={recording}
         >
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden>
             <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
-            <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3" fill="none" stroke="currentColor"
-                  strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
-          {speech.listening && <span className="pulse" aria-hidden />}
+          {recording && <span className="pulse" aria-hidden />}
         </button>
       )}
 
-      <button className="invoke" disabled={!canSend} onClick={submit}>INVOKE</button>
+      <button className="invoke" disabled={!canSend} onClick={submit}>{uploading ? "UPLOADING" : "INVOKE"}</button>
     </div>
   );
 }

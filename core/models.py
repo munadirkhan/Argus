@@ -129,6 +129,22 @@ class Spend:
 
 DEFAULT_BUDGET_USD = float(os.environ.get("ARGUS_BUDGET_USD", "10"))
 
+# Nemotron 3.5 Super VL, list price from the public catalogue.
+VISION_SPEC = ModelSpec("super-vl", "eu", 0.30, 0.90, "nvidia/Nemotron-3.5-Super-VL")
+
+# The router the running server uses, so tools that need a model (vision)
+# spend through the same capped ledger instead of opening their own client.
+_ACTIVE: "ModelRouter | None" = None
+
+
+def set_active(router: "ModelRouter") -> None:
+    global _ACTIVE
+    _ACTIVE = router
+
+
+def active_router() -> "ModelRouter | None":
+    return _ACTIVE
+
 
 class ModelRouter:
     """Owns per-region clients, tier resolution, cost accounting, and the cap."""
@@ -144,6 +160,7 @@ class ModelRouter:
         self.budget_usd = DEFAULT_BUDGET_USD if budget_usd is None else budget_usd
         self.spend = Spend.load(ledger_path)
         self.catalogue_ids: list[str] = []
+        self.vision: tuple[str, str] | None = None     # (model_id, region), set by resolve()
         self._warned = False
 
     @property
@@ -183,9 +200,20 @@ class ModelRouter:
         def find(spec: ModelSpec) -> str | None:
             for mid in live.get(spec.region, []):
                 low = mid.lower()
-                if "nemotron" in low and spec.key in low:
+                # "-vl" excluded: Nemotron-3.5-Super-VL contains "super" and must
+                # never be bound as a text tier.
+                if "nemotron" in low and spec.key in low and "-vl" not in low:
                     return mid
             return None
+
+        # Vision is optional and lives wherever the catalogue says it does.
+        self.vision = None
+        for region in ("us", "eu"):
+            mid = next((m for m in live.get(region, []) if "nemotron" in m.lower()
+                        and m.lower().endswith("-vl")), None)
+            if mid:
+                self.vision = (mid, region)
+                break
 
         for tier, prefs in TIER_PREFERENCE.items():
             bound: Resolved | None = None
@@ -259,6 +287,29 @@ class ModelRouter:
             "thinking": think, "reasoning_chars": len(reasoning),
             "finish_reason": getattr(resp.choices[0], "finish_reason", None),
         }
+
+    async def see(self, image_b64: str, mime: str, question: str,
+                  max_tokens: int = 900) -> tuple[str, dict[str, Any]]:
+        """Ask the vision model about one image. Same spend cap as everything
+        else: refused before it is sent, priced and recorded after."""
+        self.check_budget()
+        if not getattr(self, "vision", None):
+            raise RuntimeError("No vision model is available in the Token Factory catalogue")
+        model_id, region = self.vision
+        resp = await self.client(region).chat.completions.create(
+            model=model_id, max_tokens=max_tokens, temperature=0.2,
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": question},
+                {"type": "image_url", "image_url": {"url": "data:%s;base64,%s" % (mime, image_b64)}},
+            ]}])
+        u = getattr(resp, "usage", None)
+        pin = getattr(u, "prompt_tokens", 0) or 0
+        pout = getattr(u, "completion_tokens", 0) or 0
+        cost = VISION_SPEC.cost(pin, pout)
+        cumulative = self.spend.add("vision", cost)
+        text = (getattr(resp.choices[0].message, "content", "") or "").strip()
+        return text, {"model": model_id, "prompt_tokens": pin, "completion_tokens": pout,
+                      "cost_usd": cost, "cumulative_cost_usd": cumulative}
 
     def describe(self) -> str:
         lines = ["tier       family      model id                                          region"]

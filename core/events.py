@@ -27,9 +27,14 @@ def watcher_observation(id: str, observation: str, suggestion: str,
 
 
 def agent_message(id: str, role: Literal["user", "assistant"], text: str,
-                  streaming: bool = False, done: bool = True) -> dict[str, Any]:
-    return {"type": "agent.message", "id": id, "role": role, "text": text,
-            "streaming": streaming, "done": done}
+                  streaming: bool = False, done: bool = True,
+                  attachments: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    ev = {"type": "agent.message", "id": id, "role": role, "text": text,
+          "streaming": streaming, "done": done}
+    if attachments:                      # additive: files the user attached
+        ev["attachments"] = [{k: a.get(k) for k in ("path", "name", "bytes", "kind")}
+                             for a in attachments]
+    return ev
 
 
 def agent_plan(id: str, steps: list[dict[str, Any]]) -> dict[str, Any]:

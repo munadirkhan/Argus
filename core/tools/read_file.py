@@ -61,6 +61,8 @@ class ReadFile(Tool):
         with open(full, "rb") as f:
             raw = f.read(MAX_TEXT_BYTES)
         if b"\x00" in raw[:4096]:
+            if os.path.splitext(full)[1].lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"):
+                return ToolResult(ok=False, summary="%s is an image; use view_image to look at it" % name)
             return ToolResult(ok=False, summary="%s looks binary; not reading it" % name)
         text = raw.decode("utf-8", errors="replace")
         lines = text.count("\n") + (1 if text and not text.endswith("\n") else 0)

@@ -124,17 +124,42 @@ Open `http://localhost:7600/health` to see which models got bound.
 ARGUS_FAKE=1 python -m core.server
 ```
 
-### The interface
+### On the desktop (the way to use it)
+
+Windows: double-click **`Argus.cmd`**. Or `cd desktop && npm install && npm run build:web && npm start`.
+
+Argus becomes a desktop app: the hub in its own window, and a **floating orb**
+— the hundred-eyed sphere — that stays on top of whatever you're doing whenever
+the hub isn't in front. Click the orb to open the hub. When Argus notices
+something while you're in a browser or a video, a card slides out beside the
+orb with the offer, and **Proceed** runs it without switching apps. Close the
+hub and Argus keeps watching from the tray.
+
+| Hotkey (from any app) | |
+|---|---|
+| `Ctrl+Alt+A` | show / hide the hub |
+| `Ctrl+Alt+Space` | talk to Argus: press, speak, press again to send |
+
+Details: [`desktop/README.md`](desktop/README.md).
+
+### Talking, attaching, showing it things
+
+- **Voice** is transcribed **on this machine** with faster-whisper (Token Factory
+  has no speech model, and your voice shouldn't leave your computer anyway). A
+  spoken command transcribes in under a second on CPU. Push-to-talk only.
+- **Attach anything**: the `+` menu, drag-and-drop onto the hub, or Ctrl+V for
+  screenshots. Attached files are copied into `<workspace>/.argus/attachments/`,
+  so Argus reads them with its normal workspace-confined tools — handing it a
+  file never widens what it can reach. `@` references a workspace file in place.
+- **Images** are read by **Nemotron 3.5 Super VL** on Token Factory: paste a
+  screenshot of an error and Argus reads the stack trace off it. Vision calls go
+  through the same spend cap as everything else.
+
+### The interface in a browser
 
 ```bash
 cd web && npm install && npm run dev      # http://localhost:5173
 ```
-
-The composer takes dictation (click the mic — push-to-talk, never background
-listening; Chrome's Web Speech API streams that audio to Google, which is worth
-knowing for a tool that otherwise stays local) and file references: type `@` or
-click `+` to pick a workspace file. A reference hands ARGUS a path it can open
-with its own confined file tools, rather than a copy it cannot verify.
 
 **LIVE** connects to the core on port 7600. **SIMULATE** plays labelled
 sessions (markets, code) and a recording of a real research run, for when you
@@ -168,6 +193,8 @@ python scripts/test_server_offline.py     # websocket contract end to end
 python scripts/test_budget_offline.py     # the spend cap holds
 python scripts/test_writer_offline.py     # documents and code fixes land as one file
 python scripts/test_sensors_offline.py    # sensor socket: forwarding, alerts, gating
+python scripts/test_attach_voice_offline.py  # attachments can't escape; real speech → text, locally
+cd desktop && npm test                    # the desktop app end to end (orb, card, voice, attach)
 
 python scripts/verify_nebius.py           # live: models, tool calling (needs a key)
 python scripts/probe_reasoning.py         # live: thinking on/off per model
@@ -186,6 +213,7 @@ python scripts/live_smoke.py              # live: watcher + full agent loop
 | `ARGUS_FAKE` | — | `1` to run with the scripted model |
 | `ARGUS_BUDGET_USD` | 10 | Hard spend cap, enforced before every call |
 | `ARGUS_SPEND_FILE` | `.argus_spend.json` | Persistent spend ledger |
+| `ARGUS_STT_MODEL` | `base.en` | Local Whisper model for voice (`tiny.en` faster, `small.en` more accurate) |
 
 ## License
 

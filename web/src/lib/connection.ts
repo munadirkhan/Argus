@@ -1,5 +1,5 @@
 import { useArgus } from "./store";
-import type { ArgusEvent } from "./types";
+import type { ArgusEvent, SentAttachment } from "./types";
 import { SCENARIOS } from "../sim/scenarios";
 import { clearRecordingBaseline, recordFrame, recorderStatus, recordingActive, startRecording, stopRecording } from './recorder';
 
@@ -161,8 +161,8 @@ export function dismiss(id: string) {
   if (useArgus.getState().source === "live") send({ type: "user.dismiss", id });
 }
 
-export function speak(text: string) {
-  const ok = send({ type: "user.message", text });
+export function speak(text: string, attachments: SentAttachment[] = []) {
+  const ok = send({ type: "user.message", text, attachments });
   if (!ok) unreachable("send that");
   return ok;
 }

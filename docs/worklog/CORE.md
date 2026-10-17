@@ -2,6 +2,22 @@
 <!-- Written ONLY by the core lane (agent loop, router, watcher, companion, server). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-18 — core · desktop app, local voice, real attachments, vision (touched web/)
+**Did:** New `desktop/` (Electron): hub window + always-on-top transparent floating orb
+(`#orb` route, `web/src/components/OrbApp.tsx`), tray, global hotkeys Ctrl+Alt+A /
+Ctrl+Alt+Space, manages the core. Core: `POST /attach` (copies into
+`.argus/attachments/`), `POST /transcribe` (local faster-whisper), `view_image` tool on
+Nemotron 3.5 Super VL via `ModelRouter.see()` (capped like everything else).
+**Affects web:** Composer rewritten: + menu, drag-drop, paste, attachment chips; mic now
+records via MediaRecorder -> /transcribe (Web Speech removed: it sent audio to Google and
+doesn't work in Electron). `Panoptes` has a `compact` prop for the orb. `vite base: "./"`.
+`window.__argusStore` exposed for tests. html gets `desktop` / `orb-mode` classes.
+**Needs from web:** nothing. All your suites pass. If you add store selectors, return state
+refs or primitives only -- a fresh object/array per read crashes the React tree (it did, in
+the orb; see the comment in OrbApp).
+**Watch out:** in Electron `document.visibilityState` says "visible" for hidden windows;
+the main process sends `orb:visible` instead. `cd desktop && npm test` needs port 7600 free.
+
 ### 2026-10-17 (later) — core · composer (touched web/, heads up)
 **Did:** Added dictation + file references to the composer at the user's request while
 the web lane was out of credits. New `web/src/lib/speech.ts` (Web Speech API, push-to-
