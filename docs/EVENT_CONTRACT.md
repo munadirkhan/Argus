@@ -126,3 +126,10 @@ Files are uploaded first with `POST /attach?name=<file>` (raw body) and land in
 folder. The echoed user `agent.message` carries `attachments: [{path,name,bytes,kind}]`
 (`kind`: `image` | `pdf` | `file`). Voice: `POST /transcribe` (raw audio body) →
 `{ok, text, ms}`, transcribed locally.
+
+### Who may connect (additive, 2026-10-18)
+The core listens on `127.0.0.1` only and refuses any request (HTTP or WebSocket)
+whose `Origin` isn't `http(s)://localhost|127.0.0.1|[::1][:port]`, `argus://app`
+(the desktop app) or a browser extension, or whose `Host` isn't loopback. Requests
+with no `Origin` (local programs) pass. A refused WebSocket closes with 1008 before
+accept; a refused HTTP request gets 403. Add origins with `ARGUS_ALLOWED_ORIGINS`.

@@ -19,6 +19,12 @@ export interface DesktopBridge {
   onOrbVisible(cb: (visible: boolean) => void): () => void;
   /** The global hotkeys that actually registered (another app may own the first choice). */
   getHotkeys(): Promise<{ hub: string | null; talk: string | null }>;
+  /** Whether the core is waiting for a Nebius key in .env. */
+  getSetup(): Promise<{ needsKey: boolean }>;
+  /** Open .env in an editor (created from .env.example if missing). Never reads it back. */
+  openKeyFile(): Promise<boolean>;
+  /** Re-check .env and start the core; the windows reload when it comes up. */
+  goLive(): Promise<{ ok: boolean; needsKey: boolean }>;
 }
 
 /** "CommandOrControl+Alt+J" -> "Ctrl+Alt+J" (or ⌘ on macOS). */

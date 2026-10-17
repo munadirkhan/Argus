@@ -72,7 +72,7 @@ async def main():
     print("\n=== through the server ===")
     from fastapi.testclient import TestClient
     from core import server
-    with TestClient(server.app) as c:
+    with TestClient(server.app, base_url="http://127.0.0.1") as c:
         r = c.post("/attach", params={"name": "../shot.png"}, content=b"\x89PNG fake").json()
         ok &= check("/attach saves and sanitises", r.get("ok") and r["path"] == ".argus/attachments/shot.png", r)
         bad = c.post("/attach", params={"name": "empty.txt"}, content=b"").json()
@@ -89,7 +89,7 @@ async def main():
         known = server.session._known_attachments(att)
         ok &= check("only genuine attachments survive", [a["path"] for a in known] == [r["path"]], known)
 
-        with c.websocket_connect("/ws") as ws:
+        with c.websocket_connect("ws://127.0.0.1/ws") as ws:
             ws.send_text(json.dumps({"type": "user.message", "text": "", "attachments": [{"path": r["path"]}]}))
             got = None
             deadline = time.time() + 8

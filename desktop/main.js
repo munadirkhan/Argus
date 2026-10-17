@@ -10,20 +10,31 @@
  *  keys  Ctrl+Alt+A  show / hide the hub      (from any app)
  *        Ctrl+Alt+Space  talk to Argus         (press, speak, press again)
  *  core  starts the Python core if it isn't already running, stops it on quit.
+ *        With no Nebius key in .env it starts none: the hub plays a simulated
+ *        session and offers ADD KEY / GO LIVE instead of a dead screen.
  */
 const {
   app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen,
-  nativeImage, dialog, session, shell,
+  nativeImage, dialog, session, shell, protocol, net,
 } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const http = require("http");
 const os = require("os");
 const path = require("path");
+const { pathToFileURL } = require("url");
 
 const REPO = path.resolve(__dirname, "..");
 const ASSETS = path.join(__dirname, "assets");
-const DIST = path.join(REPO, "web", "dist", "index.html");
+const WEB_DIST = path.join(REPO, "web", "dist");
+const DIST = path.join(WEB_DIST, "index.html");
+// The hub is served from argus://app rather than file://, so it has a real
+// origin the core can recognise (file:// pages send "null", which any sandboxed
+// iframe on any website can send too).
+const APP_ORIGIN = "argus://app";
+protocol.registerSchemesAsPrivileged([
+  { scheme: "argus", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+]);
 const CORE = (process.env.ARGUS_CORE_URL || "http://127.0.0.1:7600").replace(/\/$/, "");
 const DEV = process.argv.includes("--dev");
 const TEST = process.argv.includes("--test");
@@ -105,12 +116,36 @@ function python() {
   return fs.existsSync(venv) ? venv : process.platform === "win32" ? "python" : "python3";
 }
 
+/* The key lives in the repo's .env (git-ignored). The shell only checks that
+ * one is there -- the value is never read into a variable, logged, or sent to
+ * the windows. */
+// Tests point this at a throwaway file to play a machine with no key.
+const ENV_FILE = (TEST && process.env.ARGUS_ENV_FILE) || path.join(REPO, ".env");
+const ENV_EXAMPLE = path.join(REPO, ".env.example");
+const setup = { needsKey: false };
+
+function hasKey() {
+  if (/^(1|true|yes)$/i.test(process.env.ARGUS_FAKE || "")) return true;
+  if ((process.env.NEBIUS_API_KEY || "").trim()) return true;
+  try {
+    return /^[ \t]*NEBIUS_API_KEY[ \t]*=[ \t]*["']?[^\s"'#]/m.test(fs.readFileSync(ENV_FILE, "utf8"));
+  } catch {
+    return false;
+  }
+}
+
 async function ensureCore() {
   const running = await health();
   if (running && running.ready) {
     coreRoot = running.root || "";
+    setup.needsKey = false;
     return true;                 // someone already runs a core; use it, don't own it
   }
+  // No key: don't start a core that would only exit. The hub plays the
+  // simulated session and offers to open the key file.
+  setup.needsKey = !hasKey();
+  if (setup.needsKey) return false;
+  if (core) return false;        // already starting
   const root = workspace();
   const log = fs.openSync(path.join(app.getPath("userData"), "core.log"), "a");
   core = spawn(python(), ["-m", "core.server"], {
@@ -161,7 +196,7 @@ function load(win, hash) {
       "<body style='background:#050407;color:#efe4cc;font:15px monospace;padding:40px'>" +
       "The interface isn't built yet. Run <b>npm run build:web</b> in argus/desktop, then start again.</body>"));
   }
-  return win.loadFile(DIST, hash ? { hash } : undefined);
+  return win.loadURL(`${APP_ORIGIN}/index.html${hash ? "#" + hash : ""}`);
 }
 
 function guard(win) {
@@ -171,7 +206,7 @@ function guard(win) {
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (e, url) => {
-    const ours = url.startsWith("file:") || (UI_URL && url.startsWith(UI_URL));
+    const ours = url.startsWith(APP_ORIGIN + "/") || (UI_URL && url.startsWith(UI_URL));
     if (!ours) {
       e.preventDefault();
       if (/^https?:\/\//i.test(url)) shell.openExternal(url);
@@ -308,8 +343,15 @@ function talk() {
 function refreshTray() {
   if (!tray) return;
   const root = coreRoot || workspace();
-  tray.setToolTip(core || coreRoot ? `Argus — watching ${path.basename(root)}` : "Argus — core offline");
+  tray.setToolTip(
+    setup.needsKey ? "Argus — simulated (add your Nebius key to go live)"
+      : core || coreRoot ? `Argus — watching ${path.basename(root)}` : "Argus — core offline");
   tray.setContextMenu(Menu.buildFromTemplate([
+    ...(setup.needsKey ? [
+      { label: "Add your Nebius key…", click: openKeyFile },
+      { label: "Go live", click: goLive },
+      { type: "separator" },
+    ] : []),
     { label: "Open Argus", ...(hotkeys.hub ? { accelerator: hotkeys.hub } : {}), click: openHub },
     { label: "Talk to Argus", ...(hotkeys.talk ? { accelerator: hotkeys.talk } : {}), click: talk },
     { type: "separator" },
@@ -385,7 +427,38 @@ function registerFirst(candidates, fn) {
 }
 
 /* ------------------------------------------------------------------- ipc */
+/* ---------------------------------------------------------- first-run key */
+async function openKeyFile() {
+  try {
+    if (!fs.existsSync(ENV_FILE)) {
+      if (fs.existsSync(ENV_EXAMPLE)) fs.copyFileSync(ENV_EXAMPLE, ENV_FILE);
+      else fs.writeFileSync(ENV_FILE, "NEBIUS_API_KEY=\nTAVILY_API_KEY=\n");
+    }
+    // .env usually has no app associated with it on Windows; Notepad always works.
+    if (process.platform === "win32") {
+      spawn("notepad.exe", [ENV_FILE], { detached: true, stdio: "ignore" }).unref();
+      return true;
+    }
+    const err = await shell.openPath(ENV_FILE);
+    if (err) shell.showItemInFolder(ENV_FILE);
+    return true;
+  } catch (e) {
+    console.error("[argus] could not open the key file:", e.message);
+    return false;
+  }
+}
+
+async function goLive() {
+  const ok = await ensureCore();
+  refreshTray();
+  if (ok) for (const w of [hub, orb]) if (w && !w.isDestroyed()) w.webContents.reload();
+  return { ok, needsKey: setup.needsKey };
+}
+
 ipcMain.handle("app:hotkeys", () => hotkeys);
+ipcMain.handle("app:setup", () => ({ needsKey: setup.needsKey }));
+ipcMain.handle("app:open-key-file", openKeyFile);
+ipcMain.handle("app:go-live", goLive);
 ipcMain.on("hub:open", openHub);
 
 ipcMain.handle("orb:expand", (_e, expanded) => {
@@ -429,6 +502,14 @@ app.whenReady().then(async () => {
   if (process.platform === "win32") app.setAppUserModelId("dev.argus.desktop");
   loadConfig();
 
+  // argus://app/<file> -> web/dist/<file>, and nothing outside it.
+  protocol.handle("argus", (req) => {
+    const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, "") || "index.html";
+    const file = path.resolve(WEB_DIST, rel);
+    if (!file.startsWith(WEB_DIST + path.sep) || !fs.existsSync(file)) return new Response("Not found", { status: 404 });
+    return net.fetch(pathToFileURL(file).toString());
+  });
+
   // The microphone, for push-to-talk -- and nothing else.
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb, details) => {
     if (permission === "media") return cb((details.mediaTypes || ["audio"]).every((t) => t === "audio"));
@@ -449,7 +530,7 @@ app.whenReady().then(async () => {
   console.log("[argus] hotkeys: hub=%s talk=%s", hotkeys.hub, hotkeys.talk);
   refreshTray();
 
-  if (!coreOk && !TEST) {
+  if (!coreOk && !TEST && !setup.needsKey) {
     dialog.showMessageBox({
       type: "warning",
       message: "Argus couldn't start its core.",
@@ -465,8 +546,8 @@ app.whenReady().then(async () => {
   if (TEST) {
     global.__argus = {
       hub: () => hub, orb: () => orb,
-      state: () => ({ orbAnchor, orbExpanded, orbSide, coreRoot, ownsCore: Boolean(core) }),
-      openHub, toggleHub,
+      state: () => ({ orbAnchor, orbExpanded, orbSide, coreRoot, ownsCore: Boolean(core), needsKey: setup.needsKey }),
+      openHub, toggleHub, hasKey, envFile: ENV_FILE, tray: () => tray,
     };
   }
 });

@@ -82,19 +82,38 @@ Token Factory bills your card once the account balance is used up and has no
 server-side spending cap, so ARGUS enforces one. Every model call is refused
 *before it is sent* once spend reaches `ARGUS_BUDGET_USD` (default $10). The
 ledger is persisted atomically, so restarts don't reset it, and a corrupt ledger
-fails closed. This matters most for the hosted demo, which runs on a real key.
+fails closed. This matters because Argus acts on its own, all day, on a real key.
+
+### It only answers to you
+
+Argus can run shell commands and read your workspace, so the core is locked to
+this machine and this hub:
+
+- It listens on `127.0.0.1` only. Nothing else on your Wi-Fi can reach it.
+- Every request — WebSockets included, which browsers don't protect with CORS —
+  must come from the hub itself (Vite on localhost, or the desktop app's own
+  `argus://app` origin) or the browser-tab extension. A web page you happen to
+  visit can't drive it, read files through it, or plant attachments.
+- The `Host` header must be loopback, which defeats DNS-rebinding tricks.
+- Keys live only in `.env`, which git ignores. The public demo page is a
+  replay: it never contacts a core, so it holds no key and can't spend one.
+
+`python scripts/test_security_offline.py` attacks all of this and checks the
+core is unreachable from your LAN address.
 
 ## Architecture
 
 ```
-  Web UI (Next.js)
-  ├─ conversation + proactive observations
-  ├─ routing HUD        ← live: which Nemotron, tokens, cost
-  └─ artifact viewer
-            │ websocket, one frozen event contract
-      ┌─────┴─────┐
-   Sandbox      Local companion
-   (hosted)     (your real files)
+  Desktop app (Electron)            Browser extension
+  ├─ hub: the full interface        └─ the tab you're reading
+  └─ floating orb, tray, hotkeys            │
+            │ websocket, one frozen event   │ POST /sense
+            │ contract, 127.0.0.1 only      │
+            └──────────────┬────────────────┘
+                     Core (Python, your machine)
+                     watcher · agent · tools · local Whisper
+                           │ HTTPS
+                     Nemotron on Nebius Token Factory · Tavily
 ```
 
 | Module | Does |
@@ -118,6 +137,9 @@ python -m core.server
 
 Open `http://localhost:7600/health` to see which models got bound.
 
+**No key yet?** The desktop app opens anyway and plays a simulated session, with
+**ADD KEY** (opens `.env` for you) and **GO LIVE** buttons.
+
 **With no API key at all**, the whole stack still runs against a scripted model:
 
 ```bash
@@ -139,6 +161,8 @@ hub and Argus keeps watching from the tray.
 |---|---|
 | `Ctrl+Alt+A` | show / hide the hub |
 | `Ctrl+Alt+Space` | talk to Argus: press, speak, press again to send |
+
+If another app owns a key, Argus takes the next free one and shows it in the tray.
 
 Details: [`desktop/README.md`](desktop/README.md).
 
@@ -165,6 +189,9 @@ cd web && npm install && npm run dev      # http://localhost:5173
 sessions (markets, code) and a recording of a real research run, for when you
 want to see the whole thing without spending tokens. Simulated sessions use
 illustrative data; LIVE never does.
+
+The public demo page is this interface built with `VITE_ARGUS_HOSTED=1`: replay
+only, LIVE switched off, and it never contacts localhost.
 
 To watch Argus notice something for real, point the core at a scratch folder
 and drop the demo notes into it:
@@ -194,7 +221,8 @@ python scripts/test_budget_offline.py     # the spend cap holds
 python scripts/test_writer_offline.py     # documents and code fixes land as one file
 python scripts/test_sensors_offline.py    # sensor socket: forwarding, alerts, gating
 python scripts/test_attach_voice_offline.py  # attachments can't escape; real speech → text, locally
-cd desktop && npm test                    # the desktop app end to end (orb, card, voice, attach)
+python scripts/test_security_offline.py  # web pages and the LAN can't drive the core
+cd desktop && npm test                    # the desktop app end to end (orb, card, voice, attach, no-key start)
 
 python scripts/verify_nebius.py           # live: models, tool calling (needs a key)
 python scripts/probe_reasoning.py         # live: thinking on/off per model
@@ -214,6 +242,8 @@ python scripts/live_smoke.py              # live: watcher + full agent loop
 | `ARGUS_BUDGET_USD` | 10 | Hard spend cap, enforced before every call |
 | `ARGUS_SPEND_FILE` | `.argus_spend.json` | Persistent spend ledger |
 | `ARGUS_STT_MODEL` | `base.en` | Local Whisper model for voice (`tiny.en` faster, `small.en` more accurate) |
+| `ARGUS_HOST` | `127.0.0.1` | Interface the core listens on. Change only on a network you trust |
+| `ARGUS_ALLOWED_ORIGINS` | — | Extra comma-separated origins allowed to talk to the core |
 
 ## License
 

@@ -2,6 +2,21 @@
 <!-- Written ONLY by the core lane (agent loop, router, watcher, companion, server). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-18 — core · locked to this machine; no-key first run; public replay build (touched web/, desktop/)
+**Did:** Core now binds 127.0.0.1 (was 0.0.0.0: anyone on the Wi-Fi could reach the shell
+tool) and an ASGI guard refuses foreign `Origin`s and non-loopback `Host`s on every route,
+WebSocket included (was `allow_origins=["*"]` and no WS check: any web page could drive it).
+Desktop serves the UI from `argus://app` instead of `file://` so it has a real origin.
+No key in `.env` -> desktop starts no core; hub plays a replay with ADD KEY / GO LIVE.
+`VITE_ARGUS_HOSTED=1` builds the public page: replay only, never contacts localhost.
+**Affects web:** new `lib/mode.ts` (`useMode`: live | hosted | needs-key) and
+`components/ModeNote.tsx`. App and OrbApp call `detectMode()` before connecting. If you
+serve the UI from a new origin, add it to `ARGUS_ALLOWED_ORIGINS` or the core will 403 it.
+Tests using Starlette's TestClient must pass `base_url="http://127.0.0.1"` and connect
+websockets to `ws://127.0.0.1/ws` (its default host `testserver` is refused).
+**Needs from web:** nothing. Every suite passes.
+**Watch out:** `scripts/test_security_offline.py` must stay green before any push.
+
 ### 2026-10-18 — core · desktop app, local voice, real attachments, vision (touched web/)
 **Did:** New `desktop/` (Electron): hub window + always-on-top transparent floating orb
 (`#orb` route, `web/src/components/OrbApp.tsx`), tray, global hotkeys Ctrl+Alt+A /

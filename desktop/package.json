@@ -8,7 +8,7 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "build:web": "npm --prefix ../web run build",
-    "test": "node tests/test_desktop.mjs"
+    "test": "node tests/test_desktop.mjs && node tests/test_nokey.mjs"
   },
   "license": "MIT",
   "devDependencies": {

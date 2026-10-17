@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Panoptes from "../scene/Panoptes";
 import { accept, dismiss, speak, switchSource } from "../lib/connection";
 import { desktop, hotkeys, keyLabel, type OrbSide } from "../lib/desktop";
+import { detectMode, useMode } from "../lib/mode";
 import { moodOf, useArgus } from "../lib/store";
 import { voice, type VoiceState } from "../lib/voice";
 
@@ -59,7 +60,8 @@ export default function OrbApp() {
 
   useEffect(() => {
     document.documentElement.classList.add("orb-mode");
-    switchSource("live");
+    // Before a key is added there is no core to wait for; stay dim until GO LIVE reloads us.
+    void detectMode().then((mode) => mode === "live" && switchSource("live"));
     const unsub = voice.subscribe(setMic);
     const t = window.setInterval(() => tick((n) => n + 1), 1000);
     return () => {
@@ -153,6 +155,7 @@ export default function OrbApp() {
   };
 
   const offline = conn !== "live";
+  const needsKey = useMode((m) => m.mode) === "needs-key";
   const lit = mood !== "idle" || mic.phase === "recording" || card?.kind === "prophecy";
 
   return (
@@ -163,7 +166,7 @@ export default function OrbApp() {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        title={offline ? "Argus core is offline — click to open" : "Open Argus · drag to move"}
+        title={needsKey ? "Add your Nebius key to go live — click to open" : offline ? "Argus core is offline — click to open" : "Open Argus · drag to move"}
       >
         <div className="orb-aura" />
         <Panoptes compact />

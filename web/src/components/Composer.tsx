@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { draft, release, upload, type Attachment } from "../lib/attach";
 import { speak } from "../lib/connection";
+import { useMode } from "../lib/mode";
 import { desktop, hotkeys, keyLabel } from "../lib/desktop";
 import { bytes, relative } from "../lib/format";
 import { VIDEO_MODE } from "../lib/keyboard";
@@ -72,6 +73,7 @@ export default function Composer() {
   attsRef.current = atts;
 
   const live = conn === "live";
+  const mode = useMode((m) => m.mode);
   const uploading = atts.some((a) => a.status === "uploading");
   const ready = atts.filter((a) => a.status === "ready");
   const canSend = live && !busy && !uploading && (text.trim().length > 0 || ready.length > 0);
@@ -295,7 +297,9 @@ export default function Composer() {
   const placeholder = VIDEO_MODE
     ? ""
     : !live
-      ? "Argus is not connected — simulated sessions are read-only"
+      ? mode === "hosted" ? "This is a replay — Argus runs on your desktop"
+        : mode === "needs-key" ? "Add your Nebius key to talk to Argus"
+        : "Argus is not connected — simulated sessions are read-only"
       : busy
         ? `Argus is at work${note ? ` — ${note.toLowerCase()}` : ""}…`
         : recording

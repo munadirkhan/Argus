@@ -7,7 +7,7 @@ is what lets you open the UI on a second screen during a demo.
 Run:  python -m core.server            (or: uvicorn core.server:app --port 7600)
 """
 from __future__ import annotations
-import asyncio, json, os, sys, time
+import asyncio, json, os, re, sys, time
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +32,10 @@ WATCH_ROOT = os.environ.get("ARGUS_WATCH_ROOT", os.getcwd())
 WATCH_INTERVAL = float(os.environ.get("ARGUS_WATCH_INTERVAL", "20"))
 WATCH_COOLDOWN = float(os.environ.get("ARGUS_WATCH_COOLDOWN", "120"))
 PORT = int(os.environ.get("PORT", "7600"))
+# Loopback only. The core can run shell commands and read the workspace, so
+# nothing else on the network should be able to reach it. ARGUS_HOST=0.0.0.0
+# opens it up -- only do that on a network you trust.
+HOST = os.environ.get("ARGUS_HOST", "127.0.0.1")
 USE_FAKE = os.environ.get("ARGUS_FAKE", "").lower() in ("1", "true", "yes")
 LEDGER_PATH = os.environ.get(
     "ARGUS_SPEND_FILE",
@@ -176,9 +180,65 @@ class Session:
                 self.watcher.enabled = was_enabled
 
 
+# Who may talk to the core. A web page you happen to visit can aim requests at
+# localhost too, and WebSockets ignore CORS -- so every request is checked here:
+#   Host    must be loopback (stops DNS rebinding: evil.com resolving to 127.0.0.1)
+#   Origin  if a browser sent one, it must be this hub (Vite on localhost, the
+#           desktop app's argus://app) or a browser extension (the tab sensor)
+# Requests with no Origin come from local programs (curl, the terminal sensor,
+# the desktop shell), which could already read the files directly.
+ALLOWED_ORIGIN = re.compile(
+    r"^(https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?"
+    r"|argus://app"
+    r"|chrome-extension://[a-p]{32}"
+    r"|moz-extension://[0-9a-f-]{36})$")
+EXTRA_ORIGINS = {o.strip().rstrip("/") for o in os.environ.get("ARGUS_ALLOWED_ORIGINS", "").split(",") if o.strip()}
+LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "[::1]", "::1"}
+
+
+def refusal(headers: dict[str, str]) -> str | None:
+    """Why a request must be refused, or None. Pure, so it can be tested."""
+    if HOST in ("127.0.0.1", "localhost", "::1"):
+        host = headers.get("host", "")
+        name = host.rsplit(":", 1)[0] if not host.startswith("[") else host.split("]")[0] + "]"
+        if name.lower() not in LOOPBACK_HOSTS:
+            return "host"
+    origin = headers.get("origin")
+    if origin is not None:
+        if origin.rstrip("/") not in EXTRA_ORIGINS and not ALLOWED_ORIGIN.match(origin):
+            return "origin"
+    elif headers.get("sec-fetch-site") == "cross-site":
+        return "cross-site"
+    return None
+
+
+class LocalOnly:
+    """ASGI guard in front of everything, WebSockets included."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
+            why = refusal(headers)
+            if why:
+                print(f"[argus] refused {scope['type']} {scope.get('path')}: {why} "
+                      f"(origin={headers.get('origin')!r}, host={headers.get('host')!r})", flush=True)
+                if scope["type"] == "websocket":
+                    await send({"type": "websocket.close", "code": 1008})
+                else:
+                    await send({"type": "http.response.start", "status": 403,
+                                "headers": [(b"content-type", b"text/plain")]})
+                    await send({"type": "http.response.body", "body": b"Argus only talks to its own hub."})
+                return
+        await self.app(scope, receive, send)
+
+
 app = FastAPI(title="ARGUS")
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    CORSMiddleware, allow_origin_regex=ALLOWED_ORIGIN.pattern, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(LocalOnly)  # added last = runs first
 
 session = Session(WATCH_ROOT)
 
@@ -301,7 +361,9 @@ def main() -> None:
         print("NEBIUS_API_KEY is not set. Either put it in .env, or run with "
               "ARGUS_FAKE=1 to use the scripted demo model.", file=sys.stderr)
     print("[argus] watching %s" % WATCH_ROOT, flush=True)
-    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
+    if HOST not in ("127.0.0.1", "localhost", "::1"):
+        print(f"[argus] WARNING: listening on {HOST} -- other machines on this network can reach Argus.", flush=True)
+    uvicorn.run(app, host=HOST, port=PORT, log_level="info")
 
 
 if __name__ == "__main__":

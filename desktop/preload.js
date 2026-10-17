@@ -17,4 +17,7 @@ contextBridge.exposeInMainWorld("argusDesktop", {
   onOrbSide: (cb) => listen("orb:side", (side) => cb(side === "right" ? "right" : "left")),
   onOrbVisible: (cb) => listen("orb:visible", (v) => cb(Boolean(v))),
   getHotkeys: () => ipcRenderer.invoke("app:hotkeys"),
+  getSetup: () => ipcRenderer.invoke("app:setup"),
+  openKeyFile: () => ipcRenderer.invoke("app:open-key-file"),
+  goLive: () => ipcRenderer.invoke("app:go-live"),
 });

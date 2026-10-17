@@ -9,6 +9,8 @@ import Prophecy from "./components/Prophecy";
 import Archive from "./components/Archive";
 import SightWindows from "./components/Sight";
 import Tape from "./components/Tape";
+import ModeNote from "./components/ModeNote";
+import { detectMode } from "./lib/mode";
 import { accept, dismiss, switchSource, toggleRecording } from "./lib/connection";
 import { isTyping, VIDEO_MODE } from './lib/keyboard';
 import { useArgus } from "./lib/store";
@@ -31,7 +33,8 @@ function OfflineNotice() {
 export default function App() {
   const zone = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    switchSource("live");
+    // No core to reach (public page, or no key yet): play a session instead.
+    void detectMode().then((mode) => switchSource(mode === "live" ? "live" : "replay"));
   }, []);
   useEffect(() => (zone.current ? watchOrbZone(zone.current) : undefined), []);
   useEffect(() => {
@@ -67,6 +70,7 @@ export default function App() {
         <main className="center">
           <div className="orb-zone" ref={zone}>
             <SightWindows />
+            <ModeNote />
             <OfflineNotice />
             <Prophecy />
           </div>

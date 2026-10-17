@@ -3,6 +3,7 @@ import { startReplay, switchSource, toggleRecording } from "../lib/connection";
 import { basename } from "../lib/format";
 import { SCENARIOS } from "../sim/scenarios";
 import { EyeGlyph } from "./Ornament";
+import { useMode } from "../lib/mode";
 import type { Mood } from "../lib/types";
 
 const WORD: Record<Mood, string> = {
@@ -22,6 +23,7 @@ export default function Header() {
   const sc = scenario ? SCENARIOS[scenario] : null;
   const sim = source === "replay";
   const recording = useArgus(s => s.recording);
+  const mode = useMode((m) => m.mode);
 
   const connLabel =
     conn === "live" ? "Live" : conn === "connecting" ? "Connecting" : conn === "offline" ? "Offline" : "";
@@ -45,7 +47,8 @@ export default function Header() {
 
       <div className="controls">
         <div className="seg" role="group" aria-label="Event source">
-          <button aria-pressed={!sim} onClick={() => switchSource("live")}>LIVE</button>
+          <button aria-pressed={!sim} onClick={() => switchSource("live")} disabled={mode !== "live"}
+            title={mode === "hosted" ? "Live runs on your desktop — see GitHub" : mode === "needs-key" ? "Add your Nebius key to go live" : undefined}>LIVE</button>
           <button aria-pressed={sim} onClick={() => switchSource("replay")}>SIMULATE</button>
         </div>
         {sim && (

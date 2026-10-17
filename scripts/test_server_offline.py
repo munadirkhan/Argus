@@ -67,7 +67,7 @@ class Reader:
 
 def main():
     ok = True
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         print("=== health ===")
         r = client.get("/health")
         ok &= check("health 200", r.status_code == 200)
@@ -83,7 +83,7 @@ def main():
         ok &= check("executor is nano", "nano" in h["models"]["executor"].lower())
 
         print("\n=== websocket handshake ===")
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect("ws://127.0.0.1/ws") as ws:
             reader = Reader(ws)
             first = reader.drain(3.0, stop_on="session.state")
             types = [e["type"] for e in first]

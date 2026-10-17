@@ -16,3 +16,14 @@ scripts/nebius_probe_results.json
 .argus_spend.json.tmp
 scripts/probe_reasoning_results.json
 scripts/last_run.jsonl
+
+# Anything that could hold a secret or personal data never goes to GitHub
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.log
+.vercel/
+.argus/
+dist-hosted/

@@ -40,6 +40,10 @@ npm start
 Developing the UI? Run the Vite dev server (`cd web && npm run dev`) and start
 the desktop with `npm run dev` — it loads http://localhost:5173 with hot reload.
 
+**No Nebius key yet?** It still opens: the hub plays a simulated session with
+**ADD KEY** (creates `.env` from `.env.example` and opens it in Notepad) and
+**GO LIVE** (starts the core once the key is saved). The tray has both too.
+
 The watched folder defaults to `~/Argus`. Change it from the tray, or set
 `ARGUS_WATCH_ROOT` before launching.
 
@@ -54,12 +58,18 @@ The watched folder defaults to `~/Argus`. Change it from the tray, or set
 - **Permissions**: the app grants the microphone (audio only) and nothing else.
   The pages are sandboxed and context-isolated; the only bridge is
   `preload.js`.
+- **Origin**: the hub is served from `argus://app` (web/dist only), not
+  `file://`, so the core can tell it apart from any web page. The core refuses
+  every other origin, and listens on 127.0.0.1 only.
+- **The key**: the shell only checks that `.env` has one. It never reads the
+  value into the app or sends it to the windows.
 
 ## Test
 
 ```bash
 npm test            # drives the real app: orb, card, hub, tray lifecycle,
-                    # a spoken WAV fed in as the microphone, a real attachment
+                    # a spoken WAV fed in as the microphone, a real attachment,
+                    # then a first run with no key (never touches your .env)
 ```
 
 The test needs port 7600 free (it starts its own core in fake-model mode).
