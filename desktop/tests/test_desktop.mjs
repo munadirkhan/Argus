@@ -109,7 +109,21 @@ try {
   check("chat shows the attachment on the message", await until(() =>
     hubPage.locator(".msg-user .sent-att", { hasText: "quarterly report.txt" }).count().then((n) => n > 0), 8000));
   check("composer clears after sending", (await hubPage.locator(".att-chip").count()) === 0);
-  await until(() => hubPage.evaluate(() => !window.__argusStore.getState().busy), 30000, 300);
+  // Wait for Argus's answer itself: `busy` can still read false in the moment
+  // before the run starts, and a reply that lands after we leave the hub is
+  // (rightly) shown beside the orb.
+  await until(() => hubPage.evaluate(() => {
+    const s = window.__argusStore.getState();
+    const last = s.entries[s.entries.length - 1];
+    return !s.busy && last?.kind === "message" && last.role === "assistant";
+  }), 60000, 300);
+  // The orb has its own connection; let the reply reach it too, or it is news
+  // to the orb when the hub goes away a moment later.
+  await until(() => orbPage.evaluate(() => {
+    const e = window.__argusStore.getState().entries;
+    return e.length > 0 && e[e.length - 1].kind === "message" && e[e.length - 1].role === "assistant";
+  }), 15000, 200);
+  await sleep(300);
   await hubPage.screenshot({ path: path.join(OUT, "hub-sent.png") });
 
   console.log("\n=== leave the hub: the orb appears ===");

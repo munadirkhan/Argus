@@ -86,3 +86,16 @@ CONTRACT_TYPES = {
     "artifact.write", "fs.tree", "usage", "error",
 }
 CLIENT_TYPES = {"user.message", "user.dismiss"}
+
+
+def approval(id: str, kind: str, title: str, detail: str, url: str,
+             timeout_s: int) -> dict[str, Any]:
+    """Argus wants the user's go-ahead (kind "confirm") or needs them to do
+    something themselves, like signing in (kind "handoff")."""
+    return {"type": "agent.approval", "id": id, "kind": kind, "title": title,
+            "detail": detail, "url": url, "timeout_s": timeout_s}
+
+
+def approval_resolved(id: str, outcome: str) -> dict[str, Any]:
+    """outcome: approved | denied | expired | cancelled"""
+    return {"type": "agent.approval.resolved", "id": id, "outcome": outcome}

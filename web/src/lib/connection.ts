@@ -146,6 +146,12 @@ function unreachable(what: string) {
   });
 }
 
+/** Answer an approval card. Only a live core can be waiting on one. */
+export function approve(id: string, yes: boolean) {
+  if (useArgus.getState().source !== "live") return;
+  if (!send({ type: "user.approve", id, approved: yes })) unreachable("answer that");
+}
+
 export function accept(id: string) {
   if (useArgus.getState().source === "replay") {
     useArgus.getState().resolveObservation(id, "accepted");

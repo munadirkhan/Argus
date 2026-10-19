@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Panoptes from "../scene/Panoptes";
-import { accept, dismiss, speak, switchSource } from "../lib/connection";
+import { accept, approve, dismiss, speak, switchSource } from "../lib/connection";
 import { desktop, hotkeys, keyLabel, type OrbSide } from "../lib/desktop";
 import { detectMode, useMode } from "../lib/mode";
 import { moodOf, useArgus } from "../lib/store";
@@ -16,6 +16,7 @@ const REPLY_SECONDS = 14;
 const DRAG_THRESHOLD = 4;
 
 type Card =
+  | { kind: "approval"; id: string; handoff: boolean; title: string; detail: string }
   | { kind: "listening" }
   | { kind: "transcribing" }
   | { kind: "heard"; text: string }
@@ -41,6 +42,7 @@ export default function OrbApp() {
   const conn = useArgus((s) => s.conn);
   const busy = useArgus((s) => s.busy);
   const prophecyId = useArgus((s) => s.prophecy);
+  const approval = useArgus((s) => s.approval);
   const obs = useArgus((s) => (s.prophecy ? s.observations[s.prophecy] : null));
   const note = useArgus((s) => (s.activeTier ? s.tiers[s.activeTier].note : ""));
   const step = useArgus((s) => {
@@ -119,6 +121,10 @@ export default function OrbApp() {
 
   const now = Date.now();
   const card: Card = useMemo(() => {
+    // Argus waiting on you beats everything: nothing moves until you answer.
+    if (approval)
+      return { kind: "approval", id: approval.id, handoff: approval.kind === "handoff",
+               title: approval.title, detail: approval.detail };
     if (mic.phase === "recording") return { kind: "listening" };
     if (mic.phase === "transcribing") return { kind: "transcribing" };
     if (heard && heard.until > now) return { kind: "heard", text: heard.text };
@@ -127,7 +133,7 @@ export default function OrbApp() {
     if (busy) return { kind: "working", note, step };
     if (reply && reply.until > now) return { kind: "reply", text: reply.text };
     return null;
-  }, [mic.phase, heard, prophecyId, obs, busy, note, step, reply, now]);
+  }, [approval, mic.phase, heard, prophecyId, obs, busy, note, step, reply, now]);
 
   const expanded = card !== null;
   useEffect(() => {
@@ -156,7 +162,7 @@ export default function OrbApp() {
 
   const offline = conn !== "live";
   const needsKey = useMode((m) => m.mode) === "needs-key";
-  const lit = mood !== "idle" || mic.phase === "recording" || card?.kind === "prophecy";
+  const lit = mood !== "idle" || mic.phase === "recording" || card?.kind === "prophecy" || card?.kind === "approval";
 
   return (
     <div className={`orb-app side-${side} ${expanded ? "expanded" : ""}`}>
@@ -171,7 +177,7 @@ export default function OrbApp() {
         <div className="orb-aura" />
         <Panoptes compact />
         {mic.phase === "recording" && <div className="orb-ring" />}
-        {card?.kind === "prophecy" && <div className="orb-badge" />}
+        {(card?.kind === "prophecy" || card?.kind === "approval") && <div className="orb-badge" />}
       </div>
 
       <AnimatePresence>
@@ -193,6 +199,18 @@ export default function OrbApp() {
                   ))}
                 </div>
                 <div className="oc-hint">{talkKey ? `${talkKey} to send` : "Click the orb to finish"} <button onClick={() => voice.cancel()}>cancel</button></div>
+              </>
+            )}
+            {card.kind === "approval" && (
+              <>
+                <div className="oc-label">{card.handoff ? "YOUR TURN" : "ARGUS ASKS"}</div>
+                <div className="oc-text">{card.title}</div>
+                {card.detail && <div className="oc-detail">{card.detail}</div>}
+                <div className="oc-actions">
+                  <button className="oc-go" onClick={() => approve(card.id, true)}>{card.handoff ? "DONE" : "ALLOW"}</button>
+                  <button onClick={() => approve(card.id, false)}>{card.handoff ? "CANCEL" : "DENY"}</button>
+                  <button onClick={() => desktop?.openHub()}>OPEN</button>
+                </div>
               </>
             )}
             {card.kind === "transcribing" && <div className="oc-label">TRANSCRIBING ON THIS MACHINE…</div>}

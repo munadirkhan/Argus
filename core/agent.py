@@ -15,13 +15,17 @@ from . import events
 from .bus import EventBus
 from .models import BudgetExceeded, ModelRouter
 from .prompts import (PLANNER_SYSTEM, EXECUTOR_SYSTEM, WRITER_SYSTEM, SYNTH_SYSTEM,
-                      DOC_FORM, CODE_FORM)
+                      DOC_FORM, CODE_FORM, SELF_GUIDE, USER_STYLE)
+from . import memory
+from .tools._workspace import places
 from .tools.registry import Registry
 from .tools._workspace import SKIP_DIRS, human_size
 
 WRITER_TOOLS = {"write_file", "read_file"}    # the writer writes; it does not research
 
 MAX_TOOL_ITERS = 6
+MAX_WEB_ITERS = 40              # a job application is dozens of clicks and fields
+HISTORY_TURNS = 8               # earlier messages the planner sees, so "do that" makes sense
 MAX_SEARCHES_PER_STEP = 2       # enforced in code: prompts alone did not hold it
 MAX_STEPS = 5
 MATERIAL_PER_TOOL = 5000      # chars of each tool output carried forward
@@ -103,6 +107,18 @@ def strip_fences(text):
         if first != -1 and t.endswith(_FENCE):
             return t[first + 1:-len(_FENCE)].strip()
     return t
+
+
+def prune_snapshots(messages, keep=2):
+    """Each browser action returns the whole page. Only the latest couple
+    matter; older ones become a stub so a 40-action form stays affordable."""
+    seen = 0
+    for m in reversed(messages):
+        if m.get("role") == "tool" and str(m.get("content", "")).startswith("PAGE: "):
+            seen += 1
+            if seen > keep:
+                first = m["content"].split("\n", 2)
+                m["content"] = "\n".join(first[:2]) + "\n[older page snapshot omitted]"
 
 
 def self_facts(router):
@@ -189,7 +205,25 @@ class Agent:
             u["cost_usd"], u["cumulative_cost_usd"]))
 
     # --- stage 1: plan (Ultra) ------------------------------------------
+    def history(self):
+        """Earlier turns of this conversation (the current message excluded)."""
+        past = self.transcript[:-1][-HISTORY_TURNS:]
+        return [{"role": t["role"], "content": t["content"][:1500]} for t in past]
+
+    async def _remember(self, remember, forget):
+        added, removed = memory.apply(
+            remember if isinstance(remember, list) else None,
+            forget if isinstance(forget, list) else None)
+        if added or removed:
+            lines = ([{"text": "+ " + f, "tone": "ok"} for f in added] +
+                     [{"text": "- " + f, "tone": "dim"} for f in removed])
+            await self.bus.emit({"type": "activity", "source": "files", "app": "Argus · memory",
+                                 "title": "Remembered" if added else "Forgot", "url": memory._path(),
+                                 "lines": lines[:6]})
+
     async def plan(self, goal):
+        """Returns (plan_id, steps, reply). A direct answer comes back as
+        `reply` with no steps -- not every message is a research job."""
         r = self.router.for_tier("planner")
         await self.bus.emit(events.agent_thinking("planner", r.model_id, "Decomposing request"))
 
@@ -199,7 +233,10 @@ class Agent:
             "planner",
             [{"role": "system", "content": PLANNER_SYSTEM.format(
                 tool_list=tool_list, workspace=self.workspace, today=_today(),
-                files=list_files(self.workspace), facts=self_facts(self.router))},
+                files=list_files(self.workspace), facts=self_facts(self.router),
+                self_guide=SELF_GUIDE % {"workspace": self.workspace},
+                places=places(), memory=memory.for_prompt(), style=USER_STYLE)},
+             *self.history(),
              {"role": "user", "content": goal}],
             response_format={"type": "json_object"},
             max_tokens=2000, temperature=0.3,
@@ -207,6 +244,10 @@ class Agent:
         await self._emit_usage(u)
 
         parsed = extract_json(getattr(msg, "content", "") or "")
+        await self._remember((parsed or {}).get("remember"), (parsed or {}).get("forget"))
+        reply = (parsed or {}).get("reply")
+        if isinstance(reply, str) and reply.strip() and not (parsed or {}).get("steps"):
+            return None, [], reply.strip()
         raw_steps = (parsed or {}).get("steps") or []
         steps = []
         for s in raw_steps:
@@ -225,7 +266,7 @@ class Agent:
         # The contract's step shape is {id, title, status}; `kind` stays internal.
         await self.bus.emit(events.agent_plan(plan_id, [
             {"id": st["id"], "title": st["title"], "status": "pending"} for st in steps]))
-        return plan_id, steps
+        return plan_id, steps, None
 
     # --- the writing stage (Ultra writes, ARGUS saves) --------------------
     async def write_document(self, goal, step, prior):
@@ -281,7 +322,9 @@ class Agent:
             context = "\n\nMaterial gathered by earlier steps:\n\n" + "\n\n".join(prior)
         system = (WRITER_SYSTEM if writing else EXECUTOR_SYSTEM).format(
             step=step["title"], goal=goal, workspace=self.workspace, context=context,
-            today=_today(), files=list_files(self.workspace), facts=self_facts(self.router))
+            today=_today(), files=list_files(self.workspace), facts=self_facts(self.router),
+            memory=(memory.for_prompt() + "\n\n" + places()).strip(),
+            form=DOC_FORM, target="")
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": "Do this step now: " + step["title"]},
@@ -293,7 +336,13 @@ class Agent:
         searches = 0
         wrote = None
 
-        for _ in range(MAX_TOOL_ITERS):
+        web = False
+        for i in range(MAX_WEB_ITERS):
+            # Ordinary steps get a handful of tool rounds; driving a website
+            # (a whole application form) gets many.
+            if i >= (MAX_WEB_ITERS if web else MAX_TOOL_ITERS):
+                break
+            prune_snapshots(messages)
             await self.bus.emit(events.agent_thinking(tier, r.model_id, note))
             msg, u = await self.router.complete(
                 tier, messages,
@@ -311,6 +360,9 @@ class Agent:
 
             for tc in tcs:
                 name = tc.function.name
+                if name.startswith("web_"):
+                    web = True
+                    note = "Working in the browser"
                 if name == "tavily_search":
                     searches += 1
                 try:
@@ -332,7 +384,7 @@ class Agent:
                 act = result.meta.get("activity") if isinstance(result.meta, dict) else None
                 if isinstance(act, dict) and act.get("source"):
                     await self.bus.emit({**act, "type": "activity"})
-                if result.ok and result.detail and name != "write_file":
+                if result.ok and result.detail and name != "write_file" and not name.startswith("web_"):
                     material.append("[%s %s]\n%s" % (
                         name, json.dumps(args)[:160], result.detail[:MATERIAL_PER_TOOL]))
 
@@ -389,8 +441,10 @@ class Agent:
         joined = "\n\n".join("[%d] %s" % (i + 1, f) for i, f in enumerate(notes))
         msg, u = await self.router.complete(
             "planner",
-            [{"role": "system", "content": SYNTH_SYSTEM + "\n\nToday's date: " + _today()
+            [{"role": "system", "content": SYNTH_SYSTEM + "\n\n" + USER_STYLE + "\n\n"
+              + memory.for_prompt() + "\n\nToday's date: " + _today()
               + "\n\n" + self_facts(self.router)},
+             *self.history(),
              {"role": "user", "content":
               "The user asked: %s\n\nYour working notes from each step:\n%s\n\n"
               "Now write your reply to the user." % (goal, joined[:MATERIAL_FOR_SYNTH])}],
@@ -409,7 +463,11 @@ class Agent:
         self.transcript.append({"role": "user", "content": goal})
 
         try:
-            plan_id, steps = await self.plan(goal)
+            plan_id, steps, reply = await self.plan(goal)
+            if reply is not None:
+                await self.bus.emit(events.agent_message(self._nid("m"), "assistant", reply))
+                self.transcript.append({"role": "assistant", "content": reply})
+                return reply
             material, notes = [], []
 
             for step in steps:

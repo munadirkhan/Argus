@@ -72,7 +72,7 @@ let orbTimer = null;
 
 /* ------------------------------------------------------------------ config */
 const CONFIG_PATH = () => path.join(app.getPath("userData"), "argus.json");
-let config = { workspace: "", orb: null, orbEnabled: true };
+let config = { workspace: "", orb: null, orbEnabled: true, fullAccess: false };
 
 function loadConfig() {
   try {
@@ -150,7 +150,12 @@ async function ensureCore() {
   const log = fs.openSync(path.join(app.getPath("userData"), "core.log"), "a");
   core = spawn(python(), ["-m", "core.server"], {
     cwd: REPO,
-    env: { ...process.env, ARGUS_WATCH_ROOT: root, PYTHONIOENCODING: "utf-8" },
+    env: {
+      ...process.env, ARGUS_WATCH_ROOT: root, PYTHONIOENCODING: "utf-8",
+      // Full PC access: file tools reach every drive (secrets stay off-limits,
+      // writes outside the workspace ask first). Off = the watched folder only.
+      ARGUS_FS_SCOPE: config.fullAccess ? "full" : "workspace",
+    },
     stdio: ["ignore", log, log],
     windowsHide: true,
   });
@@ -358,6 +363,10 @@ function refreshTray() {
     { label: `Watching: ${root}`, enabled: false },
     { label: "Choose watched folder…", click: chooseFolder },
     {
+      label: "Full PC access", type: "checkbox", checked: Boolean(config.fullAccess),
+      click: (item) => setFullAccess(item.checked),
+    },
+    {
       label: "Floating orb", type: "checkbox", checked: config.orbEnabled,
       click: (item) => {
         config.orbEnabled = item.checked;
@@ -390,15 +399,27 @@ async function chooseFolder() {
   if (res.canceled || !res.filePaths[0]) return;
   config.workspace = res.filePaths[0];
   saveConfig();
+  await restartCore("watch the new folder");
+}
+
+async function setFullAccess(on) {
+  config.fullAccess = Boolean(on);
+  saveConfig();
+  await restartCore(on ? "reach your whole PC" : "stay inside the watched folder");
+}
+
+// Settings the core reads at start need a fresh core. One we started, we
+// restart; one the user started themselves, we leave alone and say so.
+async function restartCore(why) {
   if (core) {
     stopCore();
     await new Promise((r) => setTimeout(r, 800));
     await ensureCore();
     for (const w of [hub, orb]) if (w && !w.isDestroyed()) w.webContents.reload();
-  } else {
+  } else if (!setup.needsKey) {
     await dialog.showMessageBox({
       type: "info",
-      message: "Saved. Argus is connected to a core you started yourself, so it will watch the new folder the next time the core starts from here.",
+      message: `Saved. Argus is connected to a core you started yourself, so it will ${why} the next time the core starts from here.`,
     });
   }
   refreshTray();

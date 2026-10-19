@@ -201,6 +201,48 @@ python scripts/seed_demo.py --reset      # then start the core with ARGUS_WATCH_
 python scripts/seed_demo.py --drop       # Argus speaks within one watch interval
 ```
 
+### Hands on the web: Argus's own browser
+
+Argus has a browser of its own: a real, visible Chrome window with its own
+profile (`~/.argus/browser`). It can open pages, click, type, pick options and
+upload files, so it can fill in an application, work in an account or do any
+multi-step job on a site. You can watch it and take over at any moment.
+
+- **Sign-ins are yours.** When a site needs an account, Argus opens the sign-in
+  page and hands you the window (a **YOUR TURN** card). You sign in, press
+  **DONE**, and the profile stays signed in for next time. Argus never sees or
+  types a password, one-time code, card, bank or ID number. Those fields are
+  refused in code, not just in the prompt.
+- **Nothing final without you.** Submit, apply, pay, post, delete, agree,
+  upload: each one stops at an **ARGUS ASKS** card in the hub (and beside the
+  orb, wherever you are) showing exactly what was filled in. No answer within
+  five minutes means no.
+- **Public internet only**, through the same DNS-pinning proxy as `browse`. A
+  page can't point it at your router, your LAN or the Argus core.
+- **For job applications**, put your details in `about-me.md` and your resume
+  in the workspace. Argus fills forms from those and never invents answers;
+  if something required is missing, it stops and asks.
+
+### Your whole PC (optional)
+
+Tick **Full PC access** in the tray (or set `ARGUS_FS_SCOPE=full`). The file
+tools can then reach every drive: read anything, `find_files` across your home
+folder ("find my resume"), and `open_path` to open a file or folder on screen.
+Writing outside the watched folder asks first, and so does running a program.
+SSH and cloud keys, browser profiles, Windows credential stores, `.env` files
+and password vaults are refused in both modes.
+
+### It remembers you, and talks like you
+
+Argus keeps a short file of facts about you (`~/.argus/memory.md`): your name,
+what you're after, how you like things done. It adds a line when you tell it
+something worth keeping, removes one when you ask it to forget, and never
+stores passwords, codes, card or ID numbers. Open and edit the file whenever
+you like. Questions about Argus itself, chat, and "do that" follow-ups are
+answered directly from the conversation so far, not turned into a web
+research job. It reads casual, typo-heavy, voice-to-text messages for what
+you mean, and answers the same way.
+
 ### Sensors
 
 Beyond the filesystem, Argus sees through sensors in `core/sensors/`, one file
@@ -222,6 +264,8 @@ python scripts/test_writer_offline.py     # documents and code fixes land as one
 python scripts/test_sensors_offline.py    # sensor socket: forwarding, alerts, gating
 python scripts/test_attach_voice_offline.py  # attachments can't escape; real speech → text, locally
 python scripts/test_security_offline.py  # web pages and the LAN can't drive the core
+python scripts/test_personal_offline.py  # full-PC access limits, memory, direct answers
+python core/tools/tests/test_web_hands.py # Argus's browser on a real form: refusals, approvals
 cd desktop && npm test                    # the desktop app end to end (orb, card, voice, attach, no-key start)
 
 python scripts/verify_nebius.py           # live: models, tool calling (needs a key)
@@ -244,6 +288,10 @@ python scripts/live_smoke.py              # live: watcher + full agent loop
 | `ARGUS_STT_MODEL` | `base.en` | Local Whisper model for voice (`tiny.en` faster, `small.en` more accurate) |
 | `ARGUS_HOST` | `127.0.0.1` | Interface the core listens on. Change only on a network you trust |
 | `ARGUS_ALLOWED_ORIGINS` | — | Extra comma-separated origins allowed to talk to the core |
+| `ARGUS_FS_SCOPE` | `workspace` | `full` lets the file tools reach the whole PC (secrets stay off-limits) |
+| `ARGUS_MEMORY_FILE` | `~/.argus/memory.md` | What Argus remembers about you |
+| `ARGUS_BROWSER_PROFILE` | `~/.argus/browser` | Argus's own browser profile (your sign-ins) |
+| `ARGUS_BROWSER_CHANNEL` | chrome → msedge → chromium | Which browser Argus drives |
 
 ## License
 

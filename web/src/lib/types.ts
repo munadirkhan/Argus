@@ -40,6 +40,9 @@ export type ArgusEvent = Envelope &
         cumulative_cost_usd: number;
       }
     | { type: "error"; message: string; fatal: boolean }
+    | { type: "agent.approval"; id: string; kind: "confirm" | "handoff"; title: string; detail: string;
+        url: string; timeout_s: number }
+    | { type: "agent.approval.resolved"; id: string; outcome: "approved" | "denied" | "expired" | "cancelled" }
     | ActivityEvent
   );
 
@@ -65,6 +68,16 @@ export interface SentAttachment {
   name: string;
   bytes: number;
   kind: "image" | "pdf" | "file";
+}
+
+/** Argus waiting on the user: a yes/no on a final action, or "your turn" (sign in). */
+export interface Approval {
+  id: string;
+  kind: "confirm" | "handoff";
+  title: string;
+  detail: string;
+  url: string;
+  deadline: number; // ms epoch
 }
 
 export type Mood = "idle" | "observe" | "deliberate" | "act" | "gaze";

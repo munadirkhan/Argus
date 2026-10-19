@@ -27,11 +27,12 @@ def _read_pdf(path: str) -> tuple[str, int, int]:
 class ReadFile(Tool):
     name = "read_file"
     description = ("Read a file from the user's workspace. Handles PDFs (returns "
-                   "their text) and any text file. Paths are relative to the workspace.")
+                   "their text) and any text file. Paths are relative to the workspace, or absolute "
+                   "(anywhere on the PC when full access is on).")
     parameters = {
         "type": "object",
         "properties": {"path": {"type": "string",
-                                "description": "File path, relative to the workspace."}},
+                                "description": "File path, relative to the workspace or absolute."}},
         "required": ["path"],
     }
 

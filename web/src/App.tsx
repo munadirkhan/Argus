@@ -10,6 +10,7 @@ import Archive from "./components/Archive";
 import SightWindows from "./components/Sight";
 import Tape from "./components/Tape";
 import ModeNote from "./components/ModeNote";
+import ApprovalCard from "./components/ApprovalCard";
 import { detectMode } from "./lib/mode";
 import { accept, dismiss, switchSource, toggleRecording } from "./lib/connection";
 import { isTyping, VIDEO_MODE } from './lib/keyboard';
@@ -73,6 +74,7 @@ export default function App() {
             <ModeNote />
             <OfflineNotice />
             <Prophecy />
+            <ApprovalCard />
           </div>
           <Chronicle />
         </main>

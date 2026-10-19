@@ -2,6 +2,19 @@
 <!-- Written ONLY by the core lane (agent loop, router, watcher, companion, server). -->
 <!-- Newest entry at top. Append only. -->
 
+### 2026-10-19 — core · personal branch: own browser, approvals, full-PC files, memory (touched web/, desktop/)
+**Did:** (local `personal` branch, not pushed.) `web_open/look/click/type/choose/upload/signin` drive a
+persistent, visible Chrome (`core/tools/_web.py`) through the public-only proxy. `core/approvals.py`:
+tools ask the user via `agent.approval`; silence = no. Secret fields (password/OTP/card/bank/ID) are
+refused in code. `ARGUS_FS_SCOPE=full` opens the file tools to the whole PC with a secret denylist;
+writes outside the workspace and running programs ask. New `find_files`, `open_path`. `core/memory.py`
+(`~/.argus/memory.md`). Planner can answer directly (`{"reply": ...}`), sees the last 8 turns, knows
+what Argus is (SELF_GUIDE) and how the user writes (USER_STYLE).
+**Affects web:** `ApprovalCard.tsx` (hub) and an `approval` card in `OrbApp`; store `approval`;
+`connection.approve(id, yes)`. Desktop tray: "Full PC access" (restarts the core it owns).
+**Needs from web:** nothing.
+**Watch out:** registry honours a tool's own `timeout` (approvals wait up to 5 min, sign-in 15).
+
 ### 2026-10-18 — core · locked to this machine; no-key first run; public replay build (touched web/, desktop/)
 **Did:** Core now binds 127.0.0.1 (was 0.0.0.0: anyone on the Wi-Fi could reach the shell
 tool) and an ASGI guard refuses foreign `Origin`s and non-loopback `Host`s on every route,

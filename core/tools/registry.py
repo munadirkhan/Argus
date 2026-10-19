@@ -37,6 +37,9 @@ class Registry:
         tool = self.tools.get(name)
         if tool is None:
             return ToolResult(ok=False, summary=f"unknown tool '{name}'")
+        # A tool may need longer than the default -- one that waits for the
+        # user's approval, say -- and declares it as `timeout`.
+        timeout = max(timeout, float(getattr(tool, "timeout", 0) or 0))
         try:
             return await asyncio.wait_for(tool.run(**args), timeout=timeout)
         except asyncio.TimeoutError:

@@ -133,3 +133,20 @@ whose `Origin` isn't `http(s)://localhost|127.0.0.1|[::1][:port]`, `argus://app`
 (the desktop app) or a browser extension, or whose `Host` isn't loopback. Requests
 with no `Origin` (local programs) pass. A refused WebSocket closes with 1008 before
 accept; a refused HTTP request gets 403. Add origins with `ARGUS_ALLOWED_ORIGINS`.
+
+### Approvals (additive, 2026-10-19)
+Server -> client, when a tool needs the user before doing something final, or
+needs them to act (sign in):
+
+    { "type": "agent.approval", "id": "ap_...", "kind": "confirm" | "handoff",
+      "title": "Click \"Submit application\" on jobs.lever.co",
+      "detail": "First name: ...\nEmail: ...", "url": "https://...", "timeout_s": 300 }
+    { "type": "agent.approval.resolved", "id": "ap_...",
+      "outcome": "approved" | "denied" | "expired" | "cancelled" }
+
+Client -> server, the answer (only a pending id counts, once):
+
+    { "type": "user.approve", "id": "ap_...", "approved": true }
+
+Silence is a no: an approval that times out, or is asked while no client is
+connected, is denied. Show `confirm` as ALLOW / DENY and `handoff` as DONE / CANCEL.

@@ -25,7 +25,7 @@ class ViewImage(Tool):
     parameters = {
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "Image path, relative to the workspace."},
+            "path": {"type": "string", "description": "Image path, relative to the workspace or absolute."},
             "question": {"type": "string", "description": "Optional: what to look for."},
         },
         "required": ["path"],

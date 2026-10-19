@@ -20,6 +20,7 @@ from .tools.registry import Registry
 from .watcher import Watcher, scan
 from . import attachments as attach_store, voice
 from .models import set_active
+from .approvals import APPROVALS
 from .sensors.registry import Sensors
 
 try:
@@ -67,6 +68,7 @@ class Session:
         os.environ["ARGUS_WATCH_ROOT"] = self.root
         self.agent = Agent(self.router, self.registry, self.bus, workspace=self.root)
         set_active(self.router)          # tools that need a model (vision) spend through it
+        APPROVALS.attach(self.bus)       # tools that need the user's yes ask through it
         self.watcher = Watcher(self.router, self.bus, self.root,
                                interval=WATCH_INTERVAL, cooldown=WATCH_COOLDOWN)
         self.sensors = Sensors()
@@ -122,6 +124,10 @@ class Session:
                 shown = text or "Have a look at %s." % ", ".join(a["name"] for a in atts)
                 goal = shown + attach_store.describe_for_agent(atts)
                 asyncio.create_task(self._run_agent(goal, display=shown, attachments=atts))
+        elif kind == "user.approve":
+            # The answer to an agent.approval card. Only a pending id counts.
+            if not APPROVALS.resolve(str(msg.get("id", "")), msg.get("approved") is True):
+                await self.bus.emit(events.error("That request has already been answered.", fatal=False))
         elif kind == "user.dismiss":
             obs_id = str(msg.get("id", ""))
             if obs_id:

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ActivityEvent, ArgusEvent, Mood, SentAttachment, Source, StepStatus, Tier } from "./types";
+import type { Approval, ActivityEvent, ArgusEvent, Mood, SentAttachment, Source, StepStatus, Tier } from "./types";
 import { terminalRows, type TerminalRow } from './terminal';
 
 export interface Sight extends ActivityEvent {
@@ -88,6 +88,7 @@ interface State {
   tools: Record<string, ToolCall>;
   observations: Record<string, Observation>;
   prophecy: string | null; // observation currently demanding attention
+  approval: Approval | null; // Argus waiting on the user's yes / their turn
   tiers: Record<Tier, TierState>;
   activeTier: Tier | null;
   totalCost: number;
@@ -126,6 +127,7 @@ const initial = () => ({
   tools: {},
   observations: {},
   prophecy: null,
+  approval: null as Approval | null,
   tiers: {
     watcher: emptyTier(DEFAULT_MODELS.watcher),
     planner: emptyTier(DEFAULT_MODELS.planner),
@@ -191,6 +193,18 @@ export const useArgus = create<State>((set, get) => ({
           // A new workspace starts a fresh baseline: its files aren't "changes".
           ...(moved ? { tree: { root: "", nodes: [] }, sight: {}, focus: null, touched: {} } : {}),
         });
+        break;
+      }
+
+      case "agent.approval": {
+        const deadline = (e.ts ? e.ts * 1000 : now) + e.timeout_s * 1000;
+        if (deadline < now) break; // replayed history: long gone
+        set({ approval: { id: e.id, kind: e.kind, title: e.title, detail: e.detail, url: e.url, deadline } });
+        break;
+      }
+
+      case "agent.approval.resolved": {
+        if (s.approval?.id === e.id) set({ approval: null });
         break;
       }
 
@@ -405,8 +419,8 @@ function wireFor(e: ArgusEvent): WireItem | null {
   }
 }
 
-export function moodOf(s: Pick<State, "prophecy" | "activeTier" | "busy">): Mood {
-  if (s.prophecy) return "gaze";
+export function moodOf(s: Pick<State, "prophecy" | "activeTier" | "busy" | "approval">): Mood {
+  if (s.prophecy || s.approval) return "gaze";
   if (s.activeTier === "planner") return "deliberate";
   if (s.activeTier === "executor") return "act";
   if (s.activeTier === "watcher") return "observe";

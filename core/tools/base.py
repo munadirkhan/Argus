@@ -28,6 +28,7 @@ class Tool:
     description: str = ""
     parameters: dict[str, Any] = {"type": "object", "properties": {}}
     dangerous: bool = False
+    timeout: float = 0            # seconds; 0 = the registry's default
 
     async def run(self, **kwargs: Any) -> ToolResult:
         raise NotImplementedError

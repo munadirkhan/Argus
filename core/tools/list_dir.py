@@ -3,19 +3,19 @@ from __future__ import annotations
 import os
 
 from .base import Tool, ToolResult
-from ._workspace import SKIP_DIRS, OutsideWorkspace, display, human_size, resolve
+from ._workspace import SKIP_DIRS, OutsideWorkspace, display, human_size, is_protected, resolve
 
 MAX_ENTRIES = 300
 
 
 class ListDir(Tool):
     name = "list_dir"
-    description = ("List files and folders in the user's workspace, with sizes. "
-                   "Start here to see what you have to work with.")
+    description = ("List files and folders, with sizes: the workspace by default, or any folder "
+                   "on the PC when full access is on. Start here to see what you have to work with.")
     parameters = {
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "Folder, relative to the workspace. Default '.'."},
+            "path": {"type": "string", "description": "Folder, relative to the workspace or absolute (anywhere on the PC when full access is on). Default '.'."},
             "depth": {"type": "integer", "minimum": 1, "maximum": 4,
                       "description": "How many levels deep. Default 2."},
         },
@@ -45,7 +45,7 @@ class ListDir(Tool):
                 if len(lines) >= MAX_ENTRIES:
                     truncated = True
                     return
-                if e.name.startswith(".") or e.name in SKIP_DIRS:
+                if e.name.startswith(".") or e.name in SKIP_DIRS or is_protected(e.path):
                     continue
                 pad = "  " * level
                 if e.is_dir(follow_symlinks=False):
