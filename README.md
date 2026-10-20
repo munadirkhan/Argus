@@ -270,6 +270,12 @@ news that matters to you, and your job search. If the PC was asleep it catches u
 within three hours. Change them in chat ("move my briefing to 7:30", "every
 Friday at 5 sum up my week"), or use **Morning briefing now** in the tray.
 
+**Steps only get the powers your request needs.** Every step may read and search.
+Writing files, opening things on screen, using the browser or running commands
+only happens when the planner, which sees nothing but your request, grants
+it for that step. Text in a file or on a page ("download this", "open that")
+can't hand a step new powers.
+
 No tool can rewrite `~/.argus` (memory, skills, routines, browser profile).
 Only you can, in chat or by editing the files, so a web page can't plant
 instructions for later.
@@ -309,6 +315,7 @@ python scripts/test_security_offline.py  # web pages and the LAN can't drive the
 python scripts/test_personal_offline.py  # full-PC access limits, memory, direct answers
 python scripts/test_stop_offline.py      # stop cuts a run off mid-call, mid-approval
 python scripts/test_routines_offline.py  # schedules, the briefing, skills taught in chat
+python scripts/test_injection_offline.py # a document can't make a step act beyond what you asked
 python core/tools/tests/test_web_hands.py # Argus's browser on a real form: refusals, approvals
 cd desktop && npm test                    # the desktop app end to end (orb, card, voice, attach, no-key start)
 

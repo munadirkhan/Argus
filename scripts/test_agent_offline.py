@@ -58,7 +58,7 @@ SCRIPT = {
     "ultra": [
         Turn(text=json.dumps({"steps": [
             {"title": "Search recent literature"},
-            {"title": "Write summary to notes.md"}]}),
+            {"title": "Write summary to notes.md", "tools": ["write_file"]}]}),
             prompt_tokens=3200, completion_tokens=640),
         Turn(text="Written to notes.md. The June result your local paper builds on "
                   "was superseded in August - worth checking before you go further.",

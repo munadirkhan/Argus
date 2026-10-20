@@ -11,7 +11,7 @@ from .fake import Turn
 _PLAN = json.dumps({"steps": [
     {"title": "Search the web for what changed recently"},
     {"title": "Read the local reference files"},
-    {"title": "Write the summary to disk"},
+    {"title": "Write the summary to disk", "tools": ["write_file"]},
 ]})
 
 _OBSERVE = json.dumps({

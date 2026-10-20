@@ -112,7 +112,9 @@ STARTERS = {
 3. If email or calendar are connected: today's events and anything urgent.
 4. Job search: what job-applications.md says is pending or new.
 5. Say it like a good butler: warm, brief, a little dry. Spoken, so no lists or links. Under 120
-   words. No document."""),
+   words. No document.
+Only look things up (search, read): a briefing never opens windows, drives the browser or writes
+files."""),
 }
 
 

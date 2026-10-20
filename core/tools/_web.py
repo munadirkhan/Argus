@@ -33,7 +33,7 @@ RISKY = re.compile(
     r"\b(submit|apply|send|post|publish|tweet|reply|comment|pay|purchase|buy|order|checkout|"
     r"check out|confirm|delete|remove|unsubscribe|sign ?up|register|create (?:an |my )?account|"
     r"transfer|donate|subscribe|book|reserve|finish|complete|agree|accept|place|upload|share|"
-    r"invite|connect|follow|message)\b", re.I)
+    r"invite|connect|follow|message|download|install|run|get the app)\b", re.I)
 # A form's submit button that only moves the form along.
 HARMLESS_SUBMIT = re.compile(
     r"^\s*(next|continue|back|previous|prev|search|go|find|filter|show more|load more|more|"
@@ -157,7 +157,7 @@ def is_secret_field(info: dict) -> bool:
 # A plain link only navigates; only these make a link worth asking about.
 LINK_RISKY = re.compile(
     r"\b(delete|remove|unsubscribe|pay|buy|purchase|checkout|check out|confirm|transfer|donate|"
-    r"place order|sign ?up|register|cancel (?:my|subscription|order|account))\b", re.I)
+    r"place order|sign ?up|register|cancel (?:my|subscription|order|account)|download|install)\b", re.I)
 
 
 def is_consequential(info: dict) -> bool:
