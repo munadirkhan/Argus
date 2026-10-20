@@ -9,6 +9,14 @@ Run:  python -m core.server            (or: uvicorn core.server:app --port 7600)
 from __future__ import annotations
 import asyncio, json, os, re, sys, time
 
+# .env first: modules below read their settings (ARGUS_BUDGET_USD, ARGUS_VOICE,
+# ...) when imported. Never overrides what the environment already says.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+except ImportError:
+    pass
+
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,12 +31,6 @@ from . import attachments as attach_store, speaker, voice
 from .models import set_active
 from .approvals import APPROVALS
 from .sensors.registry import Sensors
-
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
 
 WATCH_ROOT = os.environ.get("ARGUS_WATCH_ROOT", os.getcwd())
 WATCH_INTERVAL = float(os.environ.get("ARGUS_WATCH_INTERVAL", "20"))
