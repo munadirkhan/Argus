@@ -256,6 +256,24 @@ python scripts/setup_voice.py        # one time: kokoro-onnx + ~120 MB of model 
 Mute it with **VOICE** in the header or **Speak replies** in the tray.
 Starting to talk, sending a message or pressing stop cuts it off.
 
+### Skills and routines
+
+**Skills** are saved how-tos for jobs you hand Argus again and again, one
+markdown file each in `~/.argus/skills`. It starts with *Apply to a job* and
+*Morning briefing*. Teach it more in chat ("from now on, when I need a cover
+letter, keep it to three paragraphs...") or edit the files. When a request
+fits a skill, the steps doing the work follow it.
+
+**Routines** are things Argus does on its own at set times (`~/.argus/routines.json`).
+Out of the box: a spoken **morning briefing** on weekdays at 8:00, covering weather,
+news that matters to you, and your job search. If the PC was asleep it catches up
+within three hours. Change them in chat ("move my briefing to 7:30", "every
+Friday at 5 sum up my week"), or use **Morning briefing now** in the tray.
+
+No tool can rewrite `~/.argus` (memory, skills, routines, browser profile).
+Only you can, in chat or by editing the files, so a web page can't plant
+instructions for later.
+
 ### It remembers you, and talks like you
 
 Argus keeps a short file of facts about you (`~/.argus/memory.md`): your name,
@@ -290,6 +308,7 @@ python scripts/test_attach_voice_offline.py  # attachments can't escape; real sp
 python scripts/test_security_offline.py  # web pages and the LAN can't drive the core
 python scripts/test_personal_offline.py  # full-PC access limits, memory, direct answers
 python scripts/test_stop_offline.py      # stop cuts a run off mid-call, mid-approval
+python scripts/test_routines_offline.py  # schedules, the briefing, skills taught in chat
 python core/tools/tests/test_web_hands.py # Argus's browser on a real form: refusals, approvals
 cd desktop && npm test                    # the desktop app end to end (orb, card, voice, attach, no-key start)
 

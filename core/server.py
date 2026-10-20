@@ -27,7 +27,7 @@ from .bus import EventBus
 from .models import ModelRouter
 from .tools.registry import Registry
 from .watcher import Watcher, scan
-from . import attachments as attach_store, speaker, voice
+from . import attachments as attach_store, routines, skills, speaker, voice
 from .models import set_active
 from .approvals import APPROVALS
 from .sensors.registry import Sensors
@@ -78,6 +78,7 @@ class Session:
         self.watcher.context_fn = self.sensors.context
         self._agent_lock = asyncio.Lock()
         self._agent_task: asyncio.Task | None = None
+        self._routine_task: asyncio.Task | None = None
         self._watch_task: asyncio.Task | None = None
         self._sense_task: asyncio.Task | None = None
         self.ready = False
@@ -93,6 +94,12 @@ class Session:
             asyncio.get_running_loop().run_in_executor(None, voice.warm)
         if not USE_FAKE:
             asyncio.get_running_loop().run_in_executor(None, speaker.warm)
+        # Starter skills and the morning briefing -- in the user's real home, so
+        # never from a scripted test run unless it points them somewhere else.
+        if not USE_FAKE or os.environ.get("ARGUS_ROUTINES_FILE"):
+            skills.ensure_starters()
+            routines.ensure_morning_briefing()
+            self._routine_task = asyncio.create_task(self.routine_loop())
         self.ready = True
         await self.bus.emit(events.session_state(
             self.runtime, "connected", self.root, self.label))
@@ -112,8 +119,30 @@ class Session:
         reason = "%s reported: %s" % (sensor.name, (bad[0] if bad else event.get("title", ""))[:160])
         asyncio.create_task(self.watcher.consider([], [], [], reason=reason))
 
+    async def routine_loop(self, every: float = 30.0) -> None:
+        """Run routines when they come due (catching up within 3 hours)."""
+        while True:
+            await asyncio.sleep(every)
+            try:
+                for r in routines.due():
+                    if self._agent_lock.locked():
+                        break                    # busy: try again next tick
+                    routines.mark_ran(r["id"])
+                    print("[argus] routine: %s" % r["name"], flush=True)
+                    asyncio.create_task(self._run_agent(r["prompt"], display="⏰ " + r["name"]))
+                    break                        # one at a time
+            except Exception as e:               # a bad routines file must not kill the loop
+                print("[argus] routine check failed: %s" % e, flush=True)
+
+    async def run_routine(self, name: str) -> bool:
+        for r in routines.load():
+            if r["name"].lower() == name.strip().lower():
+                asyncio.create_task(self._run_agent(r["prompt"], display="⏰ " + r["name"]))
+                return True
+        return False
+
     async def stop(self) -> None:
-        for task in (self._watch_task, self._sense_task):
+        for task in (self._watch_task, self._sense_task, self._routine_task):
             if task:
                 task.cancel()
                 try:
@@ -349,6 +378,20 @@ async def speak(payload: dict) -> Response:
     except speaker.VoiceUnavailable as e:
         return Response(status_code=503, content=str(e).encode())
     return Response(content=audio, media_type="audio/wav", headers={"x-argus-voice": eng})
+
+
+@app.get("/routines")
+async def list_routines() -> dict:
+    return {"routines": routines.load(), "skills": [{"name": s["name"], "when": s["when"]}
+                                                    for s in skills.all_skills()]}
+
+
+@app.post("/routine/run")
+async def run_routine(payload: dict) -> dict:
+    """Run a routine now (the tray's "Morning briefing now")."""
+    if session._agent_lock.locked():
+        return {"ok": False, "error": "busy"}
+    return {"ok": await session.run_routine(str(payload.get("name", "")))}
 
 
 @app.get("/voice")

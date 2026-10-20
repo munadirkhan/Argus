@@ -363,6 +363,7 @@ function refreshTray() {
     ] : []),
     { label: "Open Argus", ...(hotkeys.hub ? { accelerator: hotkeys.hub } : {}), click: openHub },
     { label: "Talk to Argus", ...(hotkeys.talk ? { accelerator: hotkeys.talk } : {}), click: talk },
+    { label: "Morning briefing now", enabled: !setup.needsKey, click: () => runRoutine("Morning briefing") },
     { type: "separator" },
     { label: `Watching: ${root}`, enabled: false },
     { label: "Choose watched folder…", click: chooseFolder },
@@ -485,6 +486,17 @@ async function goLive() {
 }
 
 ipcMain.handle("app:hotkeys", () => hotkeys);
+
+/* -------------------------------------------------------------- routines */
+function runRoutine(name) {
+  const body = JSON.stringify({ name });
+  const req = http.request(CORE + "/routine/run", {
+    method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body) },
+    timeout: 3000,
+  }, (res) => res.resume());
+  req.on("error", (e) => console.error("[argus] couldn't start the routine:", e.message));
+  req.end(body);
+}
 
 /* ------------------------------------------------------------ voice out */
 function setVoiceOut(on) {

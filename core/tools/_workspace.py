@@ -53,6 +53,15 @@ _PROTECTED_FILES = re.compile(
 
 
 def is_protected(real: str) -> bool:
+    # Argus's own home (~/.argus): memory, skills, routines, browser profile,
+    # voice. They steer what Argus does next, so no tool may rewrite them --
+    # only the user, in chat or by editing the files.
+    own = os.path.realpath(os.path.join(os.path.expanduser("~"), ".argus"))
+    try:
+        if os.path.commonpath([os.path.realpath(real), own]) == own:
+            return True
+    except ValueError:
+        pass
     p = real.replace("\\", "/")
     if p.endswith("/.env.example") or p.lower().endswith(".env.example"):
         return False

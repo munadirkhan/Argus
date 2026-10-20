@@ -16,7 +16,7 @@ from .bus import EventBus
 from .models import BudgetExceeded, ModelRouter
 from .prompts import (PLANNER_SYSTEM, EXECUTOR_SYSTEM, WRITER_SYSTEM, SYNTH_SYSTEM,
                       DOC_FORM, CODE_FORM, SELF_GUIDE, USER_STYLE)
-from . import memory
+from . import memory, routines, skills
 from .tools._workspace import places
 from .tools.registry import Registry
 from .tools._workspace import SKIP_DIRS, human_size
@@ -196,6 +196,7 @@ class Agent:
         self._ids = itertools.count(1)
         self.transcript = []
         self._running = None          # (plan_id, step_id) of the step in progress
+        self.chosen_skills = []       # skills the planner picked for this request
 
     def _nid(self, prefix):
         return "%s_%d" % (prefix, next(self._ids))
@@ -222,6 +223,27 @@ class Agent:
                                  "title": "Remembered" if added else "Forgot", "url": memory._path(),
                                  "lines": lines[:6]})
 
+    async def _learn(self, parsed):
+        """Skills and routines the planner decided to save, change or drop."""
+        notes = []
+        sk = parsed.get("save_skill")
+        if isinstance(sk, dict) and skills.save(sk.get("name"), sk.get("when", ""), sk.get("steps")):
+            notes.append({"text": "skill saved: %s" % sk.get("name"), "tone": "ok"})
+        if isinstance(parsed.get("forget_skill"), str) and skills.delete(parsed["forget_skill"]):
+            notes.append({"text": "skill removed: %s" % parsed["forget_skill"], "tone": "dim"})
+        rt = parsed.get("routine")
+        if isinstance(rt, dict):
+            r = routines.upsert(rt.get("name"), rt.get("time"), rt.get("days"), rt.get("prompt"),
+                                rt.get("enabled", True))
+            if r:
+                notes.append({"text": "routine: %s at %s (%s)" % (r["name"], r["time"], ",".join(r["days"])),
+                              "tone": "ok"})
+        if isinstance(parsed.get("cancel_routine"), str) and routines.remove(parsed["cancel_routine"]):
+            notes.append({"text": "routine cancelled: %s" % parsed["cancel_routine"], "tone": "dim"})
+        if notes:
+            await self.bus.emit({"type": "activity", "source": "files", "app": "Argus · routines & skills",
+                                 "title": "Updated", "url": routines.path(), "lines": notes})
+
     async def plan(self, goal):
         """Returns (plan_id, steps, reply). A direct answer comes back as
         `reply` with no steps -- not every message is a research job."""
@@ -236,7 +258,8 @@ class Agent:
                 tool_list=tool_list, workspace=self.workspace, today=_today(),
                 files=list_files(self.workspace), facts=self_facts(self.router),
                 self_guide=SELF_GUIDE % {"workspace": self.workspace},
-                places=places(), memory=memory.for_prompt(), style=USER_STYLE)},
+                places=places(), memory=memory.for_prompt(), style=USER_STYLE,
+                skills=skills.for_planner(), routines=routines.for_planner())},
              *self.history(),
              {"role": "user", "content": goal}],
             response_format={"type": "json_object"},
@@ -246,6 +269,8 @@ class Agent:
 
         parsed = extract_json(getattr(msg, "content", "") or "")
         await self._remember((parsed or {}).get("remember"), (parsed or {}).get("forget"))
+        await self._learn(parsed or {})
+        self.chosen_skills = skills.find((parsed or {}).get("use_skills"))
         reply = (parsed or {}).get("reply")
         if isinstance(reply, str) and reply.strip() and not (parsed or {}).get("steps"):
             return None, [], reply.strip()
@@ -284,7 +309,8 @@ class Agent:
         context = ("\n\nMaterial gathered by earlier steps:\n\n" + "\n\n".join(prior)) if prior else ""
         system = WRITER_SYSTEM.format(
             step=step["title"], goal=goal, workspace=self.workspace, context=context,
-            today=_today(), files=list_files(self.workspace), facts=self_facts(self.router),
+            today=_today(), files=list_files(self.workspace),
+            facts=(self_facts(self.router) + "\n\n" + skills.for_steps(self.chosen_skills)).strip(),
             target=target,
             form=(CODE_FORM % target) if is_code(target) else DOC_FORM)
         msg, u = await self.router.complete(
@@ -324,7 +350,8 @@ class Agent:
         system = (WRITER_SYSTEM if writing else EXECUTOR_SYSTEM).format(
             step=step["title"], goal=goal, workspace=self.workspace, context=context,
             today=_today(), files=list_files(self.workspace), facts=self_facts(self.router),
-            memory=(memory.for_prompt() + "\n\n" + places()).strip(),
+            memory=(memory.for_prompt() + "\n\n" + places() + "\n\n"
+                    + skills.for_steps(self.chosen_skills)).strip(),
             form=DOC_FORM, target="")
         messages = [
             {"role": "system", "content": system},
@@ -452,7 +479,8 @@ class Agent:
             max_tokens=500, temperature=0.6, thinking=False,
         )
         await self._emit_usage(u)
-        return brief((getattr(msg, "content", "") or "").strip()) or "Done."
+        spoken = any("briefing" in s["name"].lower() for s in self.chosen_skills) or "briefing" in goal.lower()
+        return brief((getattr(msg, "content", "") or "").strip(), 130 if spoken else 75) or "Done."
 
     # --- the whole thing --------------------------------------------------
     async def run(self, goal, display=None, attachments=None):
