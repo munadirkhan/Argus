@@ -9,3 +9,5 @@ pypdf>=5.0
 playwright>=1.48
 faster-whisper>=1.1
 Pillow>=10
+# Argus's British voice (optional; scripts/setup_voice.py also fetches the model files)
+kokoro-onnx>=0.6,<0.7
