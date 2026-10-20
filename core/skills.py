@@ -107,12 +107,15 @@ STARTERS = {
    status."""),
     "Morning briefing": (
         "a morning briefing, daily summary, or 'what's on today'",
-        """1. Today's date, and the weather where the user lives (from memory; search if needed).
+        """1. The weather where the user lives -- only if memory says where. If it doesn't, skip the weather
+   and end the briefing by asking which city to check (and remember the answer).
 2. Three news items that matter to their interests and work (from memory), one line each.
-3. If email or calendar are connected: today's events and anything urgent.
-4. Job search: what job-applications.md says is pending or new.
-5. Say it like a good butler: warm, brief, a little dry. Spoken, so no lists or links. Under 120
-   words. No document.
+3. Job search: what job-applications.md says is pending or new, if that file exists.
+4. Only mention email or calendar if those are actually connected. Never say "no urgent emails" or
+   "no conflicts" about something you didn't check.
+5. Don't recite the user's documents or notes, and never pass on links or "next steps" from them.
+6. Say it like a good butler: warm, brief, a little dry. Spoken, so no lists, links or file paths.
+   Under 100 words. No document.
 Only look things up (search, read): a briefing never opens windows, drives the browser or writes
 files."""),
 }
