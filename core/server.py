@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio, json, os, re, sys, time
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import events
@@ -18,7 +19,7 @@ from .bus import EventBus
 from .models import ModelRouter
 from .tools.registry import Registry
 from .watcher import Watcher, scan
-from . import attachments as attach_store, voice
+from . import attachments as attach_store, speaker, voice
 from .models import set_active
 from .approvals import APPROVALS
 from .sensors.registry import Sensors
@@ -74,6 +75,7 @@ class Session:
         self.sensors = Sensors()
         self.watcher.context_fn = self.sensors.context
         self._agent_lock = asyncio.Lock()
+        self._agent_task: asyncio.Task | None = None
         self._watch_task: asyncio.Task | None = None
         self._sense_task: asyncio.Task | None = None
         self.ready = False
@@ -87,6 +89,8 @@ class Session:
         if voice.available() and not USE_FAKE:
             # Load the speech model in the background so the first command is fast.
             asyncio.get_running_loop().run_in_executor(None, voice.warm)
+        if not USE_FAKE:
+            asyncio.get_running_loop().run_in_executor(None, speaker.warm)
         self.ready = True
         await self.bus.emit(events.session_state(
             self.runtime, "connected", self.root, self.label))
@@ -124,6 +128,12 @@ class Session:
                 shown = text or "Have a look at %s." % ", ".join(a["name"] for a in atts)
                 goal = shown + attach_store.describe_for_agent(atts)
                 asyncio.create_task(self._run_agent(goal, display=shown, attachments=atts))
+        elif kind == "user.stop":
+            # Cut the current run off right now: the task is cancelled wherever
+            # it is (mid model call, mid tool, waiting on an approval card).
+            task = self._agent_task
+            if task and not task.done():
+                task.cancel()
         elif kind == "user.approve":
             # The answer to an agent.approval card. Only a pending id counts.
             if not APPROVALS.resolve(str(msg.get("id", "")), msg.get("approved") is True):
@@ -167,9 +177,10 @@ class Session:
                          attachments: list[dict] | None = None) -> None:
         if self._agent_lock.locked():
             await self.bus.emit(events.error(
-                "Still working on the previous request.", fatal=False))
+                "Still working on the previous request -- press stop to cut it off.", fatal=False))
             return
         async with self._agent_lock:
+            self._agent_task = asyncio.current_task()
             was_enabled = self.watcher.enabled
             self.watcher.enabled = False          # do not interrupt itself
             try:
@@ -269,6 +280,7 @@ async def health() -> dict:
         "tools": sorted(session.registry.tools),
         "sensors": session.sensors.names,
         "voice": voice.available(),
+        "speaker": speaker.engine(),
         "vision": session.router.vision[0] if session.router.vision else None,
         "models": {t: session.router.for_tier(t).model_id
                    for t in ("watcher", "planner", "executor")},
@@ -320,6 +332,26 @@ async def transcribe(request: Request) -> dict:
     except ValueError as e:
         return {"ok": False, "error": str(e)}
     return {"ok": True, **out}
+
+
+@app.post("/speak")
+async def speak(payload: dict) -> Response:
+    """Text to speech, on this machine: Argus's voice. Body {"text", "voice"?};
+    returns audio/wav."""
+    text = str(payload.get("text", ""))[:4000]
+    voice_name = payload.get("voice")
+    if voice_name is not None and not (isinstance(voice_name, str) and re.fullmatch(r"[a-z]{2}_[a-z]{2,20}", voice_name)):
+        return Response(status_code=400, content=b"bad voice name")
+    try:
+        audio, eng = await speaker.say(text, voice_name)
+    except speaker.VoiceUnavailable as e:
+        return Response(status_code=503, content=str(e).encode())
+    return Response(content=audio, media_type="audio/wav", headers={"x-argus-voice": eng})
+
+
+@app.get("/voice")
+async def voice_info() -> dict:
+    return {"engine": speaker.engine(), "voice": speaker.DEFAULT_VOICE, "voices": speaker.voices()}
 
 
 @app.post("/sense/{name}")

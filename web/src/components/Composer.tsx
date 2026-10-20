@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { draft, release, upload, type Attachment } from "../lib/attach";
-import { speak } from "../lib/connection";
+import { speak, stop } from "../lib/connection";
+import { speaker } from "../lib/speaker";
 import { useMode } from "../lib/mode";
 import { desktop, hotkeys, keyLabel } from "../lib/desktop";
 import { bytes, relative } from "../lib/format";
@@ -185,6 +186,7 @@ export default function Composer() {
     if (mic.phase === "recording") appendHeard(await voice.stop());
     else if (mic.phase === "idle") {
       voice.clearError();
+      speaker.hush();
       await voice.start();
     }
   };
@@ -202,7 +204,8 @@ export default function Composer() {
         if (full) send(full);
       } else if (voice.phase === "idle") {
         voice.clearError();
-        await voice.start();
+        speaker.hush();
+      await voice.start();
       }
     });
   }, [send]);
@@ -420,7 +423,11 @@ export default function Composer() {
         </button>
       )}
 
-      <button className="invoke" disabled={!canSend} onClick={submit}>{uploading ? "UPLOADING" : "INVOKE"}</button>
+      {live && busy ? (
+        <button className="invoke stop" onClick={stop} title="Stop Argus right now (Esc)">STOP <kbd>Esc</kbd></button>
+      ) : (
+        <button className="invoke" disabled={!canSend} onClick={submit}>{uploading ? "UPLOADING" : "INVOKE"}</button>
+      )}
     </div>
   );
 }

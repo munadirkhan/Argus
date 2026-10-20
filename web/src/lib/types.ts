@@ -42,6 +42,7 @@ export type ArgusEvent = Envelope &
     | { type: "error"; message: string; fatal: boolean }
     | { type: "agent.approval"; id: string; kind: "confirm" | "handoff"; title: string; detail: string;
         url: string; timeout_s: number }
+    | { type: "agent.stopped"; by: string }
     | { type: "agent.approval.resolved"; id: string; outcome: "approved" | "denied" | "expired" | "cancelled" }
     | ActivityEvent
   );

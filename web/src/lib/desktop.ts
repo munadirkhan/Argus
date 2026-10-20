@@ -25,6 +25,13 @@ export interface DesktopBridge {
   openKeyFile(): Promise<boolean>;
   /** Re-check .env and start the core; the windows reload when it comes up. */
   goLive(): Promise<{ ok: boolean; needsKey: boolean }>;
+  /** Spoken replies on/off -- one setting for both windows and the tray. */
+  getVoiceOut?(): Promise<boolean>;
+  setVoiceOut?(on: boolean): void;
+  onVoiceOut?(cb: (on: boolean) => void): () => void;
+  /** Silence Argus's voice in every window. */
+  hush?(): void;
+  onHush?(cb: () => void): () => void;
 }
 
 /** "CommandOrControl+Alt+J" -> "Ctrl+Alt+J" (or ⌘ on macOS). */

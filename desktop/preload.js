@@ -20,4 +20,9 @@ contextBridge.exposeInMainWorld("argusDesktop", {
   getSetup: () => ipcRenderer.invoke("app:setup"),
   openKeyFile: () => ipcRenderer.invoke("app:open-key-file"),
   goLive: () => ipcRenderer.invoke("app:go-live"),
+  getVoiceOut: () => ipcRenderer.invoke("voice:get-out"),
+  setVoiceOut: (on) => ipcRenderer.send("voice:set-out", Boolean(on)),
+  onVoiceOut: (cb) => listen("voice:out", (on) => cb(Boolean(on))),
+  hush: () => ipcRenderer.send("voice:hush"),
+  onHush: (cb) => listen("voice:hush", () => cb()),
 });

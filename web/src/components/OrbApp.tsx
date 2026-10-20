@@ -1,11 +1,13 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Panoptes from "../scene/Panoptes";
-import { accept, approve, dismiss, speak, switchSource } from "../lib/connection";
+import { accept, approve, dismiss, speak, stop, switchSource } from "../lib/connection";
 import { desktop, hotkeys, keyLabel, type OrbSide } from "../lib/desktop";
 import { detectMode, useMode } from "../lib/mode";
 import { moodOf, useArgus } from "../lib/store";
 import { voice, type VoiceState } from "../lib/voice";
+import { speaker } from "../lib/speaker";
+import { useVoiceOut } from "../lib/useVoiceOut";
 
 /* The floating orb: Argus while you are anywhere else -- a browser, a game,
  * a video. Always on top, tiny, draggable; click it to open the hub. When it
@@ -36,6 +38,9 @@ export default function OrbApp() {
   const [heard, setHeard] = useState<{ text: string; until: number } | null>(null);
   const [, tick] = useState(0);
   const [talkKey, setTalkKey] = useState<string | null>(null);
+  // On the desktop, the orb is the one that talks: it is always running,
+  // whether or not the hub is open.
+  useVoiceOut(Boolean(desktop));
   useEffect(() => { void hotkeys().then((h) => setTalkKey(keyLabel(h.talk))); }, []);
 
   const mood = useArgus((s) => moodOf(s));
@@ -112,6 +117,7 @@ export default function OrbApp() {
         }
       } else if (voice.phase === "idle") {
         voice.clearError();
+        speaker.hush();               // don't record Argus talking
         await voice.start();
       }
     });
@@ -235,6 +241,10 @@ export default function OrbApp() {
               <>
                 <div className="oc-label">AT WORK</div>
                 <div className="oc-text dim">{card.step || card.note || "…"}</div>
+                <div className="oc-actions">
+                  <button className="oc-stop" onClick={() => stop()}>STOP</button>
+                  <button onClick={() => desktop?.openHub()}>OPEN</button>
+                </div>
               </>
             )}
             {card.kind === "reply" && (

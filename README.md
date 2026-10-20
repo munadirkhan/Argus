@@ -232,6 +232,30 @@ Writing outside the watched folder asks first, and so does running a program.
 SSH and cloud keys, browser profiles, Windows credential stores, `.env` files
 and password vaults are refused in both modes.
 
+### Stop, any time
+
+While Argus works, **INVOKE** becomes **STOP** (or press **Esc**); the orb's
+"at work" card has one too. Stopping cancels the run wherever it is: mid
+model call, mid browser action, or waiting on an approval card (which is
+withdrawn). It also silences the voice, and Argus is ready for the next request
+at once.
+
+### Its voice
+
+Argus speaks its replies, what it notices, and its questions for you. Speech
+is generated **on this machine**: Nebius Token Factory has no speech models,
+and cloud voices bill per character. With Kokoro installed it uses a British
+male voice (`bm_george` by default; also `bm_lewis`, `bm_daniel`, `bm_fable`).
+It's a Jarvis-style butler voice, not a copy of any actor. Without Kokoro it
+falls back to Windows' built-in voice.
+
+```bash
+python scripts/setup_voice.py        # one time: kokoro-onnx + ~120 MB of model files
+```
+
+Mute it with **VOICE** in the header or **Speak replies** in the tray.
+Starting to talk, sending a message or pressing stop cuts it off.
+
 ### It remembers you, and talks like you
 
 Argus keeps a short file of facts about you (`~/.argus/memory.md`): your name,
@@ -265,6 +289,7 @@ python scripts/test_sensors_offline.py    # sensor socket: forwarding, alerts, g
 python scripts/test_attach_voice_offline.py  # attachments can't escape; real speech → text, locally
 python scripts/test_security_offline.py  # web pages and the LAN can't drive the core
 python scripts/test_personal_offline.py  # full-PC access limits, memory, direct answers
+python scripts/test_stop_offline.py      # stop cuts a run off mid-call, mid-approval
 python core/tools/tests/test_web_hands.py # Argus's browser on a real form: refusals, approvals
 cd desktop && npm test                    # the desktop app end to end (orb, card, voice, attach, no-key start)
 
@@ -290,6 +315,8 @@ python scripts/live_smoke.py              # live: watcher + full agent loop
 | `ARGUS_ALLOWED_ORIGINS` | — | Extra comma-separated origins allowed to talk to the core |
 | `ARGUS_FS_SCOPE` | `workspace` | `full` lets the file tools reach the whole PC (secrets stay off-limits) |
 | `ARGUS_MEMORY_FILE` | `~/.argus/memory.md` | What Argus remembers about you |
+| `ARGUS_VOICE` | `bm_george` | Kokoro voice for Argus's speech |
+| `ARGUS_VOICE_SPEED` | `1.0` | Speaking rate |
 | `ARGUS_BROWSER_PROFILE` | `~/.argus/browser` | Argus's own browser profile (your sign-ins) |
 | `ARGUS_BROWSER_CHANNEL` | chrome → msedge → chromium | Which browser Argus drives |
 

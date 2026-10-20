@@ -146,6 +146,12 @@ function unreachable(what: string) {
   });
 }
 
+/** Cut the current run off, right now. */
+export function stop() {
+  if (useArgus.getState().source !== "live") return;
+  if (!send({ type: "user.stop" })) unreachable("stop it");
+}
+
 /** Answer an approval card. Only a live core can be waiting on one. */
 export function approve(id: string, yes: boolean) {
   if (useArgus.getState().source !== "live") return;

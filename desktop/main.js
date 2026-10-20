@@ -72,7 +72,7 @@ let orbTimer = null;
 
 /* ------------------------------------------------------------------ config */
 const CONFIG_PATH = () => path.join(app.getPath("userData"), "argus.json");
-let config = { workspace: "", orb: null, orbEnabled: true, fullAccess: false };
+let config = { workspace: "", orb: null, orbEnabled: true, fullAccess: false, voiceOut: true };
 
 function loadConfig() {
   try {
@@ -191,6 +191,8 @@ const prefs = (extra = {}) => ({
   contextIsolation: true,
   nodeIntegration: false,
   sandbox: true,
+  // Argus speaks its replies without waiting for a click first.
+  autoplayPolicy: "no-user-gesture-required",
   ...extra,
 });
 
@@ -205,6 +207,8 @@ function load(win, hash) {
 }
 
 function guard(win) {
+  // Tests exercise the voice end to end, silently.
+  if (TEST) win.webContents.setAudioMuted(true);
   // Links open in the real browser; the window itself never navigates away.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
@@ -363,6 +367,10 @@ function refreshTray() {
     { label: `Watching: ${root}`, enabled: false },
     { label: "Choose watched folder…", click: chooseFolder },
     {
+      label: "Speak replies", type: "checkbox", checked: config.voiceOut !== false,
+      click: (item) => setVoiceOut(item.checked),
+    },
+    {
       label: "Full PC access", type: "checkbox", checked: Boolean(config.fullAccess),
       click: (item) => setFullAccess(item.checked),
     },
@@ -477,6 +485,19 @@ async function goLive() {
 }
 
 ipcMain.handle("app:hotkeys", () => hotkeys);
+
+/* ------------------------------------------------------------ voice out */
+function setVoiceOut(on) {
+  config.voiceOut = Boolean(on);
+  saveConfig();
+  for (const w of [hub, orb]) if (w && !w.isDestroyed()) w.webContents.send("voice:out", config.voiceOut);
+  refreshTray();
+}
+ipcMain.handle("voice:get-out", () => config.voiceOut !== false);
+ipcMain.on("voice:set-out", (_e, on) => setVoiceOut(on));
+ipcMain.on("voice:hush", () => {
+  for (const w of [hub, orb]) if (w && !w.isDestroyed()) w.webContents.send("voice:hush");
+});
 ipcMain.handle("app:setup", () => ({ needsKey: setup.needsKey }));
 ipcMain.handle("app:open-key-file", openKeyFile);
 ipcMain.handle("app:go-live", goLive);

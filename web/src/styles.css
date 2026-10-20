@@ -564,3 +564,16 @@ html.orb-mode body { user-select: none; }
 .orb-card.approval .oc-text { color: var(--bone); }
 .orb-card.approval .oc-detail { margin-top: 4px; font-size: 10.5px; color: var(--ash); max-height: 64px; overflow: hidden;
   white-space: pre-wrap; }
+
+/* ---------------------------------------------------------------- stop */
+.invoke.stop { color: var(--bone); background: rgba(160, 40, 20, .35); border-color: rgba(255, 110, 70, .7); }
+.invoke.stop:hover { background: rgba(190, 50, 25, .55); }
+.invoke.stop kbd { margin-left: 6px; opacity: .7; }
+.orb-card .oc-actions .oc-stop { color: var(--bone); background: rgba(160, 40, 20, .45); border-color: rgba(255, 110, 70, .7); }
+
+/* ---------------------------------------------------------------- voice out */
+.voice-toggle { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; font-family: var(--font-display);
+  font-size: 9.5px; letter-spacing: .24em; color: var(--ash); background: transparent; border: 1px solid var(--line); cursor: pointer; }
+.voice-toggle .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ash); opacity: .5; }
+.voice-toggle.on { color: var(--bone); border-color: var(--line-strong); }
+.voice-toggle.on .dot { background: var(--gold); opacity: 1; box-shadow: 0 0 8px var(--gold); }

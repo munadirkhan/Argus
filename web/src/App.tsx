@@ -12,7 +12,9 @@ import Tape from "./components/Tape";
 import ModeNote from "./components/ModeNote";
 import ApprovalCard from "./components/ApprovalCard";
 import { detectMode } from "./lib/mode";
-import { accept, dismiss, switchSource, toggleRecording } from "./lib/connection";
+import { desktop } from "./lib/desktop";
+import { useVoiceOut } from "./lib/useVoiceOut";
+import { accept, dismiss, stop, switchSource, toggleRecording } from "./lib/connection";
 import { isTyping, VIDEO_MODE } from './lib/keyboard';
 import { useArgus } from "./lib/store";
 import { watchOrbZone } from "./lib/layout";
@@ -33,6 +35,8 @@ function OfflineNotice() {
 
 export default function App() {
   const zone = useRef<HTMLDivElement>(null);
+  // In a plain browser the hub talks; on the desktop the orb does.
+  useVoiceOut(!desktop);
   useEffect(() => {
     // No core to reach (public page, or no key yet): play a session instead.
     void detectMode().then((mode) => switchSource(mode === "live" ? "live" : "replay"));
@@ -51,6 +55,9 @@ export default function App() {
       } else if (state.prophecy && !state.busy && (event.key === 'Escape' || (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement)))) {
         event.preventDefault();
         if (event.key === 'Enter') accept(state.prophecy); else dismiss(state.prophecy);
+      } else if (state.busy && event.key === 'Escape') {
+        event.preventDefault();
+        stop();
       }
     };
     window.addEventListener('keydown', onKey);

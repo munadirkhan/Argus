@@ -150,3 +150,13 @@ Client -> server, the answer (only a pending id counts, once):
 
 Silence is a no: an approval that times out, or is asked while no client is
 connected, is denied. Show `confirm` as ALLOW / DENY and `handoff` as DONE / CANCEL.
+
+### Stop and speech (additive, 2026-10-20)
+Client -> server `{ "type": "user.stop" }` cancels the run in progress (no-op if
+idle). The server emits `{ "type": "agent.stopped", "by": "user" }`, marks the
+running step `failed`, withdraws any open approval (`outcome: "cancelled"`) and
+ends with an assistant message `"Stopped."`.
+
+`POST /speak {"text", "voice"?}` returns `audio/wav` synthesized locally
+(Kokoro, else Windows SAPI); 503 if no engine. `GET /voice` reports the engine
+and voices. `/health` has `"speaker": "kokoro" | "sapi" | null`.

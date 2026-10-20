@@ -9,7 +9,7 @@ Flow for one user request:
 Every stage emits contract events so the UI can show the routing live.
 """
 from __future__ import annotations
-import datetime, json, itertools, os, re
+import asyncio, datetime, json, itertools, os, re
 
 from . import events
 from .bus import EventBus
@@ -195,6 +195,7 @@ class Agent:
             workspace or os.environ.get("ARGUS_WATCH_ROOT") or os.getcwd())
         self._ids = itertools.count(1)
         self.transcript = []
+        self._running = None          # (plan_id, step_id) of the step in progress
 
     def _nid(self, prefix):
         return "%s_%d" % (prefix, next(self._ids))
@@ -471,6 +472,7 @@ class Agent:
             material, notes = [], []
 
             for step in steps:
+                self._running = (plan_id, step["id"])
                 await self.bus.emit(events.agent_step(plan_id, step["id"], "running"))
                 try:
                     runner = self.write_document if step.get("kind") == "write" else self.execute_step
@@ -488,7 +490,17 @@ class Agent:
                         "step failed: %s: %s" % (type(e).__name__, e)))
                     notes.append("%s: FAILED (%s)" % (step["title"], e))
 
+            self._running = None
             answer = await self.synthesise(goal, notes + material)
+        except asyncio.CancelledError:
+            # The user pressed stop. Whatever was in flight -- a model call, a
+            # browser action, an approval card -- is already cancelled; close
+            # the run out cleanly so the UI is ready for the next request.
+            if self._running:
+                await self.bus.emit(events.agent_step(*self._running, "failed"))
+                self._running = None
+            await self.bus.emit(events.agent_stopped())
+            answer = "Stopped."
         except Exception as e:
             await self.bus.emit(events.error("%s: %s" % (type(e).__name__, e), fatal=False))
             answer = "I hit a problem and stopped: %s" % e

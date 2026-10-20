@@ -46,6 +46,9 @@ class Shell(Tool):
             proc.kill()
             await proc.wait()
             return ToolResult(ok=False, summary="timed out after %ds" % TIMEOUT_S)
+        except asyncio.CancelledError:
+            proc.kill()                     # the user pressed stop
+            raise
         text = (out or b"").decode("utf-8", errors="replace")
         if len(text) > MAX_OUTPUT:
             text = text[:MAX_OUTPUT] + "\n...[truncated]"

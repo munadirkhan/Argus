@@ -89,6 +89,7 @@ interface State {
   observations: Record<string, Observation>;
   prophecy: string | null; // observation currently demanding attention
   approval: Approval | null; // Argus waiting on the user's yes / their turn
+  stoppedAt: number; // when the user last pressed stop
   tiers: Record<Tier, TierState>;
   activeTier: Tier | null;
   totalCost: number;
@@ -128,6 +129,7 @@ const initial = () => ({
   observations: {},
   prophecy: null,
   approval: null as Approval | null,
+  stoppedAt: 0,
   tiers: {
     watcher: emptyTier(DEFAULT_MODELS.watcher),
     planner: emptyTier(DEFAULT_MODELS.planner),
@@ -382,9 +384,17 @@ export const useArgus = create<State>((set, get) => ({
         break;
       }
 
+      case "agent.stopped":
+        set({ busy: false, activeTier: null, approval: null, stoppedAt: now,
+          tiers: Object.fromEntries(Object.entries(s.tiers).map(([key, tier]) => [key, { ...tier, active: false }])) as Record<Tier, TierState>,
+        });
+        break;
+
       case "error":
+        // A failed step is not the end of the run: only a fatal error (or the
+        // final reply) means Argus has stopped working.
         set({ entries: [...s.entries, { kind: "error", id: nid(), message: e.message }],
-          activeTier: null, busy: false,
+          activeTier: e.fatal ? null : s.activeTier, busy: e.fatal ? false : s.busy,
           tiers: Object.fromEntries(Object.entries(s.tiers).map(([key, tier]) => [key, { ...tier, active: false }])) as Record<Tier, TierState>,
         });
         break;

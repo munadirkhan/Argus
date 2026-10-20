@@ -4,6 +4,8 @@ import { basename } from "../lib/format";
 import { SCENARIOS } from "../sim/scenarios";
 import { EyeGlyph } from "./Ornament";
 import { useMode } from "../lib/mode";
+import { useEffect, useState } from "react";
+import { speaker } from "../lib/speaker";
 import type { Mood } from "../lib/types";
 
 const WORD: Record<Mood, string> = {
@@ -24,6 +26,8 @@ export default function Header() {
   const sim = source === "replay";
   const recording = useArgus(s => s.recording);
   const mode = useMode((m) => m.mode);
+  const [voiceOn, setVoiceOn] = useState(speaker.enabled);
+  useEffect(() => speaker.subscribe(setVoiceOn), []);
 
   const connLabel =
     conn === "live" ? "Live" : conn === "connecting" ? "Connecting" : conn === "offline" ? "Offline" : "";
@@ -59,6 +63,13 @@ export default function Header() {
               </button>
             ))}
           </div>
+        )}
+        {!sim && (
+          <button className={`voice-toggle ${voiceOn ? "on" : ""}`} aria-pressed={voiceOn}
+            onClick={() => speaker.setEnabled(!voiceOn)}
+            title={voiceOn ? "Argus speaks its replies -- click to mute" : "Argus is muted -- click to let it speak"}>
+            <span className="dot" />{voiceOn ? "VOICE" : "MUTED"}
+          </button>
         )}
         {!sim && <button className={`record-toggle ${recording ? 'recording' : ''}`}
           onClick={toggleRecording} disabled={!recording && conn !== 'live'} aria-pressed={recording}

@@ -88,6 +88,12 @@ CONTRACT_TYPES = {
 CLIENT_TYPES = {"user.message", "user.dismiss"}
 
 
+def agent_stopped(by: str = "user") -> dict[str, Any]:
+    """The run was cut short. Everything in flight -- model calls, tools,
+    approval cards, speech -- stops with it."""
+    return {"type": "agent.stopped", "by": by}
+
+
 def approval(id: str, kind: str, title: str, detail: str, url: str,
              timeout_s: int) -> dict[str, Any]:
     """Argus wants the user's go-ahead (kind "confirm") or needs them to do

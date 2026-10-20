@@ -140,6 +140,9 @@ try {
   check("orb window is transparent", await orbPage.evaluate(() =>
     getComputedStyle(document.body).backgroundColor === "rgba(0, 0, 0, 0)"));
   check("orb is live too", await until(() => orbPage.evaluate(() => window.__argusStore.getState().conn === "live"), 15000));
+  const coreLog = path.join(await main(({ app }) => app.getPath("userData")), "core.log");
+  check("Argus spoke its reply (orb asked the core for speech; muted in tests)",
+    await until(() => fs.readFileSync(coreLog, "utf8").includes('"POST /speak HTTP/1.1" 200'), 15000, 300));
   await sleep(1200);
   await orbPage.screenshot({ path: path.join(OUT, "orb.png"), omitBackground: true });
 
