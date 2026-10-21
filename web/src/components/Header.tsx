@@ -16,7 +16,7 @@ const WORD: Record<Mood, string> = {
   gaze: "SPEAKING",
 };
 
-export default function Header() {
+export default function Header({ onSettings }: { onSettings?: () => void }) {
   const mood = useArgus((s) => moodOf(s));
   const conn = useArgus((s) => s.conn);
   const source = useArgus((s) => s.source);
@@ -63,6 +63,11 @@ export default function Header() {
               </button>
             ))}
           </div>
+        )}
+        {onSettings && (
+          <button className="sanctum-btn" onClick={onSettings} title="Settings: theme, voice, models, memory... (Ctrl+,)">
+            <span className="glyph">☼</span>SANCTUM
+          </button>
         )}
         {!sim && (
           <button className={`voice-toggle ${voiceOn ? "on" : ""}`} aria-pressed={voiceOn}

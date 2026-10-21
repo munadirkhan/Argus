@@ -232,6 +232,25 @@ Writing outside the watched folder asks first, and so does running a program.
 SSH and cloud keys, browser profiles, Windows credential stores, `.env` files
 and password vaults are refused in both modes.
 
+### The Sanctum (settings)
+
+**SANCTUM** in the header (or **Ctrl+,**) opens every setting, applied as you
+change it, with no restart and no editing files:
+
+- **Appearance:** six colour themes (Panoptes, Arc Reactor, Hades, Olympus, Nyx,
+  Gorgon) that repaint the panels, the hundred eyes and the floating orb together.
+- **Voice:** on/off, which voice, speed, live preview.
+- **Persona:** what Argus calls you; casual, butler or formal; short or detailed replies.
+- **Minds:** any model on your Nebius account for each role (watcher, oracle,
+  hands), priced live from the catalogue so the spending limit stays exact;
+  thinking on/off per role. Unpriced models are refused.
+- **Tribute:** the spending limit, with what's spent so far.
+- **Watcher:** on/off, how often it looks, how long it stays quiet; the watched folder.
+- **Reach:** full PC access, the floating orb, start with Windows.
+- **Memory / Skills / Routines:** read, edit, add, delete, run now.
+
+Settings live in `~/.argus/settings.json`, which no agent tool can write.
+
 ### Stop, any time
 
 While Argus works, **INVOKE** becomes **STOP** (or press **Esc**); the orb's
@@ -316,6 +335,7 @@ python scripts/test_personal_offline.py  # full-PC access limits, memory, direct
 python scripts/test_stop_offline.py      # stop cuts a run off mid-call, mid-approval
 python scripts/test_routines_offline.py  # schedules, the briefing, skills taught in chat
 python scripts/test_injection_offline.py # a document can't make a step act beyond what you asked
+python scripts/test_settings_offline.py  # the Sanctum: validated, saved, applied live
 python core/tools/tests/test_web_hands.py # Argus's browser on a real form: refusals, approvals
 cd desktop && npm test                    # the desktop app end to end (orb, card, voice, attach, no-key start)
 

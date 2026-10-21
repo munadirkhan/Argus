@@ -3,7 +3,7 @@ import { useArgus } from "../lib/store";
 import { usd } from "../lib/format";
 import { Panel } from "./Ornament";
 
-const COLORS = { watcher: "#efe4cc", planner: "#ff8a2a", executor: "#d6a04c" } as const;
+const COLORS = { watcher: "var(--bone)", planner: "var(--amber)", executor: "var(--gold)" } as const;
 const WATCH_CALLS_8H = 3 * 60 * 8; // one look every 20 seconds
 
 export default function Tribute() {

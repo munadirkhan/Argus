@@ -158,6 +158,7 @@ class Watcher:
         self.seen: dict[str, dict] = {}         # every observation ever made
         self._ids = itertools.count(1)
         self.enabled = True
+        self.muted = False                      # the user switched the watcher off in settings
         # Set by the server: returns what the sensors (terminal, browser...)
         # currently see, so the watcher looks at more than the filesystem.
         self.context_fn = None
@@ -275,7 +276,7 @@ class Watcher:
     async def run_forever(self) -> None:
         while True:
             try:
-                if self.enabled:
+                if self.enabled and not self.muted:
                     await self.tick()
             except asyncio.CancelledError:
                 raise

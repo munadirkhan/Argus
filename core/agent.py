@@ -16,7 +16,7 @@ from .bus import EventBus
 from .models import BudgetExceeded, ModelRouter
 from .prompts import (PLANNER_SYSTEM, EXECUTOR_SYSTEM, WRITER_SYSTEM, SYNTH_SYSTEM,
                       DOC_FORM, CODE_FORM, SELF_GUIDE, USER_STYLE)
-from . import memory, routines, skills
+from . import memory, routines, settings, skills
 from .tools._workspace import places
 from .tools.registry import Registry
 from .tools._workspace import SKIP_DIRS, human_size
@@ -267,7 +267,8 @@ class Agent:
                 tool_list=tool_list, workspace=self.workspace, today=_today(),
                 files=list_files(self.workspace), facts=self_facts(self.router),
                 self_guide=SELF_GUIDE % {"workspace": self.workspace},
-                places=places(), memory=memory.for_prompt(), style=USER_STYLE,
+                places=places(), memory=memory.for_prompt(),
+                style=USER_STYLE + "\n\n" + settings.persona_prompt(),
                 skills=skills.for_planner(), routines=routines.for_planner())},
              *self.history(),
              {"role": "user", "content": goal}],
@@ -490,6 +491,7 @@ class Agent:
         msg, u = await self.router.complete(
             "planner",
             [{"role": "system", "content": SYNTH_SYSTEM + "\n\n" + USER_STYLE + "\n\n"
+              + settings.persona_prompt() + "\n\n"
               + memory.for_prompt() + "\n\nToday's date: " + _today()
               + "\n\n" + self_facts(self.router)},
              *self.history(),

@@ -162,6 +162,11 @@ class ModelRouter:
         self.catalogue_ids: list[str] = []
         self.vision: tuple[str, str] | None = None     # (model_id, region), set by resolve()
         self._warned = False
+        # Every model in the live catalogue: id -> {region, price_in, price_out (USD per
+        # 1M tokens), description, context, modality}. Lets the user pick any of them.
+        self.models: dict[str, dict[str, Any]] = {}
+        self.automatic: dict[Tier, Resolved] = {}     # what resolve() chose (Nemotron)
+        self.thinking: dict[str, bool | None] = {}     # per-tier override from settings
 
     @property
     def remaining_usd(self) -> float:
@@ -185,11 +190,57 @@ class ModelRouter:
 
     async def _list_models(self, region: str) -> list[str]:
         try:
+            res = await self.client(region).models.list(extra_query={"verbose": "true"})
+        except TypeError:                       # a client without extra_query (tests)
             res = await self.client(region).models.list()
-            return [m.id for m in res.data]
         except Exception as e:
             print(f"[router] catalogue lookup failed for {region}: {type(e).__name__}: {e}")
             return []
+        ids = []
+        for m in res.data:
+            ids.append(m.id)
+            info = self._model_info(m, region)
+            if m.id not in self.models or region == "us":
+                self.models[m.id] = info
+        return ids
+
+    @staticmethod
+    def _model_info(m: Any, region: str) -> dict[str, Any]:
+        extra = getattr(m, "model_extra", None) or {}
+        def get(k, default=None):
+            return getattr(m, k, None) if getattr(m, k, None) is not None else extra.get(k, default)
+        pricing = get("pricing") or {}
+        def per_m(v):
+            try:
+                return round(float(v) * 1_000_000, 4)
+            except (TypeError, ValueError):
+                return None
+        arch = get("architecture") or {}
+        return {"id": m.id, "region": region,
+                "price_in": per_m(pricing.get("prompt")), "price_out": per_m(pricing.get("completion")),
+                "description": (get("description") or "")[:300], "context": get("context_length"),
+                "modality": (arch.get("modality") if isinstance(arch, dict) else None) or "text->text"}
+
+    def bind(self, tier: Tier, model_id: str | None) -> Resolved:
+        """Point a tier at any catalogue model (None = back to automatic).
+
+        Only models with a known price can be bound: the spend cap has to be
+        able to count what they cost."""
+        if not model_id:
+            if tier in self.automatic:
+                self.resolved[tier] = self.automatic[tier]
+            return self.for_tier(tier)
+        info = self.models.get(model_id)
+        if not info:
+            raise ValueError("%s isn't in the Token Factory catalogue" % model_id)
+        if info["price_in"] is None or info["price_out"] is None:
+            raise ValueError("%s has no published price, so the spend cap couldn't count it" % model_id)
+        spec = ModelSpec(model_id.split("/")[-1].lower(), info["region"], info["price_in"],
+                         info["price_out"], model_id)
+        family = next((f for f in CATALOGUE if f in model_id.lower() and "nemotron" in model_id.lower()),
+                      "custom")
+        self.resolved[tier] = Resolved(tier, family, model_id, info["region"], spec)
+        return self.resolved[tier]
 
     async def resolve(self) -> dict[Tier, Resolved]:
         """Discover real model IDs, then bind each tier to the best available."""
@@ -229,6 +280,7 @@ class ModelRouter:
                 bound = Resolved(tier, family, spec.fallback_id, spec.region, spec)
                 print(f"[router] {tier}: no live match, using fallback {spec.fallback_id}")
             self.resolved[tier] = bound
+            self.automatic[tier] = bound
         return self.resolved
 
     def for_tier(self, tier: Tier) -> Resolved:
@@ -261,8 +313,12 @@ class ModelRouter:
             kwargs["tool_choice"] = "auto"
         if response_format:
             kwargs["response_format"] = response_format
-        think = TIER_THINKING[tier] if thinking is None else thinking
-        if not think:
+        override = self.thinking.get(tier)
+        think = (thinking if thinking is not None else
+                 override if override is not None else TIER_THINKING[tier])
+        # The thinking switch is a Nemotron chat-template flag. Other models get it
+        # only when the user explicitly turned thinking off for that tier.
+        if not think and (r.family != "custom" or override is False):
             kwargs["extra_body"] = _NO_THINK
 
         resp = await self.client(r.region).chat.completions.create(**kwargs)

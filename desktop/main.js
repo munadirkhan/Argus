@@ -377,22 +377,12 @@ function refreshTray() {
     },
     {
       label: "Floating orb", type: "checkbox", checked: config.orbEnabled,
-      click: (item) => {
-        config.orbEnabled = item.checked;
-        saveConfig();
-        if (item.checked) scheduleOrb(); else hideOrb();
-      },
+      click: (item) => setOrbEnabled(item.checked),
     },
     {
       label: process.platform === "darwin" ? "Open at login" : "Start with Windows",
       type: "checkbox", checked: app.getLoginItemSettings().openAtLogin,
-      click: (item) => {
-        app.setLoginItemSettings({
-          openAtLogin: item.checked,
-          // In development, Electron needs the app folder; --hidden starts in the tray.
-          args: app.isPackaged ? ["--hidden"] : [path.resolve(__dirname), "--hidden"],
-        });
-      },
+      click: (item) => setOpenAtLogin(item.checked),
     },
     { type: "separator" },
     { label: "Quit Argus", click: () => { quitting = true; app.quit(); } },
@@ -486,6 +476,47 @@ async function goLive() {
 }
 
 ipcMain.handle("app:hotkeys", () => hotkeys);
+
+/* ------------------------------------------------- settings (the Sanctum) */
+function setOrbEnabled(on) {
+  config.orbEnabled = Boolean(on);
+  saveConfig();
+  if (on) scheduleOrb(); else hideOrb();
+}
+
+function setOpenAtLogin(on) {
+  app.setLoginItemSettings({
+    openAtLogin: Boolean(on),
+    // In development, Electron needs the app folder; --hidden starts in the tray.
+    args: app.isPackaged ? ["--hidden"] : [path.resolve(__dirname), "--hidden"],
+  });
+}
+
+function shellSettings() {
+  return {
+    fullAccess: Boolean(config.fullAccess), orbEnabled: config.orbEnabled !== false,
+    voiceOut: config.voiceOut !== false, openAtLogin: app.getLoginItemSettings().openAtLogin,
+    workspace: coreRoot || workspace(), hotkeys,
+  };
+}
+
+ipcMain.handle("shell:get", () => shellSettings());
+ipcMain.handle("shell:set", async (_e, key, value) => {
+  if (key === "fullAccess") await setFullAccess(Boolean(value));
+  else if (key === "orbEnabled") setOrbEnabled(value);
+  else if (key === "openAtLogin") setOpenAtLogin(value);
+  else if (key === "voiceOut") setVoiceOut(value);
+  refreshTray();
+  return shellSettings();
+});
+ipcMain.handle("shell:choose-folder", async () => {
+  await chooseFolder();
+  return shellSettings();
+});
+// One window changed settings in the core: tell the other to refetch them.
+ipcMain.on("settings:changed", (e) => {
+  for (const w of [hub, orb]) if (w && !w.isDestroyed() && w.webContents !== e.sender) w.webContents.send("settings:changed");
+});
 
 /* -------------------------------------------------------------- routines */
 function runRoutine(name) {

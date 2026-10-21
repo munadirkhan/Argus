@@ -75,6 +75,18 @@ def apply(remember=None, forget=None) -> tuple[list[str], list[str]]:
     return added, removed
 
 
+def replace(facts) -> list[str]:
+    """The user edited the list in settings: keep exactly theirs (secrets still refused)."""
+    out, seen = [], set()
+    for raw in (facts or [])[:MAX_FACTS]:
+        f = clean(raw)
+        if f and f.lower() not in seen:
+            out.append(f)
+            seen.add(f.lower())
+    _save(out)
+    return out
+
+
 def for_prompt() -> str:
     facts = load()[-IN_PROMPT:]
     if not facts:

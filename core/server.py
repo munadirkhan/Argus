@@ -27,7 +27,7 @@ from .bus import EventBus
 from .models import ModelRouter
 from .tools.registry import Registry
 from .watcher import Watcher, scan
-from . import attachments as attach_store, routines, skills, speaker, voice
+from . import attachments as attach_store, memory, routines, settings, skills, speaker, voice
 from .models import set_active
 from .approvals import APPROVALS
 from .sensors.registry import Sensors
@@ -83,8 +83,25 @@ class Session:
         self._sense_task: asyncio.Task | None = None
         self.ready = False
 
+    def apply_settings(self, s: dict) -> None:
+        """Make the settings true, now: models, budget, voice, watcher."""
+        for tier in settings.TIERS:
+            try:
+                self.router.bind(tier, s["models"][tier])
+            except ValueError as e:              # a model that left the catalogue
+                print("[argus] settings: %s; using automatic" % e, flush=True)
+                self.router.bind(tier, None)
+            self.router.thinking[tier] = s["thinking"][tier]
+        self.router.budget_usd = (s["budget_usd"] if s["budget_usd"] is not None
+                                  else float(os.environ.get("ARGUS_BUDGET_USD", "10")))
+        speaker.configure(s["voice"]["name"], s["voice"]["speed"])
+        self.watcher.muted = not s["watcher"]["enabled"]
+        self.watcher.interval = s["watcher"]["interval"]
+        self.watcher.cooldown = s["watcher"]["cooldown"]
+
     async def start(self) -> None:
         await self.router.resolve()
+        self.apply_settings(settings.load())
         print("[argus] model routing:\n" + self.router.describe(), flush=True)
         print("[argus] sensors: %s" % (", ".join(self.sensors.names) or "(none)"), flush=True)
         print("[argus] vision: %s" % (self.router.vision[0] if self.router.vision else "(none)"),
@@ -111,7 +128,7 @@ class Session:
         """A sensor saw something urgent (e.g. a stack trace). Wake the watcher
         now rather than at its next tick -- unless ARGUS is mid-task or has
         spoken too recently to interrupt again."""
-        if not self.watcher.enabled or self._agent_lock.locked():
+        if not self.watcher.enabled or self.watcher.muted or self._agent_lock.locked():
             return
         if time.time() - self.watcher.last_spoke_at < self.watcher.cooldown:
             return
@@ -367,17 +384,98 @@ async def transcribe(request: Request) -> dict:
 
 @app.post("/speak")
 async def speak(payload: dict) -> Response:
-    """Text to speech, on this machine: Argus's voice. Body {"text", "voice"?};
-    returns audio/wav."""
+    """Text to speech, on this machine: Argus's voice. Body {"text", "voice"?,
+    "speed"?}; returns audio/wav."""
     text = str(payload.get("text", ""))[:4000]
     voice_name = payload.get("voice")
+    try:
+        speed = min(2.0, max(0.6, float(payload["speed"]))) if payload.get("speed") is not None else None
+    except (TypeError, ValueError):
+        return Response(status_code=400, content=b"bad speed")
     if voice_name is not None and not (isinstance(voice_name, str) and re.fullmatch(r"[a-z]{2}_[a-z]{2,20}", voice_name)):
         return Response(status_code=400, content=b"bad voice name")
     try:
-        audio, eng = await speaker.say(text, voice_name)
+        audio, eng = await speaker.say(text, voice_name, speed)
     except speaker.VoiceUnavailable as e:
         return Response(status_code=503, content=str(e).encode())
     return Response(content=audio, media_type="audio/wav", headers={"x-argus-voice": eng})
+
+
+def _settings_view() -> dict:
+    r = session.router
+    return {
+        "settings": settings.load(),
+        "themes": list(settings.THEMES),
+        "catalogue": sorted(r.models.values(), key=lambda m: m["id"].lower()),
+        "automatic": {t: r.automatic[t].model_id for t in r.automatic},
+        "bound": {t: r.for_tier(t).model_id for t in settings.TIERS},
+        "spend_usd": round(r.spend.total_usd, 4), "budget_usd": r.budget_usd,
+        "budget_default": float(os.environ.get("ARGUS_BUDGET_USD", "10")),
+        "speaker": {"engine": speaker.engine(), "voice": speaker.DEFAULT_VOICE,
+                    "speed": speaker.SPEED, "voices": speaker.voices()},
+        "memory": memory.load(),
+        "memory_file": memory._path(),
+        "skills": [{"name": s["name"], "when": s["when"], "text": s["text"]} for s in skills.all_skills()],
+        "routines": routines.load(),
+        "fs_scope": "full" if os.environ.get("ARGUS_FS_SCOPE") == "full" else "workspace",
+        "workspace": session.root,
+    }
+
+
+@app.get("/settings")
+async def get_settings() -> dict:
+    return _settings_view()
+
+
+@app.put("/settings", response_model=None)
+async def put_settings(patch: dict) -> Response | dict:
+    """Change settings (any subset). Applied immediately."""
+    try:
+        merged = settings.validate(settings._merge(settings.load(), patch), session.router.models)
+    except (ValueError, TypeError) as e:
+        return Response(status_code=400, content=str(e).encode())
+    settings.save(merged)
+    session.apply_settings(merged)
+    return _settings_view()
+
+
+@app.put("/memory")
+async def put_memory(payload: dict) -> dict:
+    """Replace the remembered facts with the list the user edited."""
+    facts = payload.get("facts")
+    if not isinstance(facts, list):
+        return {"ok": False}
+    return {"ok": True, "memory": memory.replace(facts)}
+
+
+@app.put("/skill")
+async def put_skill(payload: dict) -> dict:
+    old = payload.get("old_name")
+    if isinstance(old, str) and old.strip() and old.strip().lower() != str(payload.get("name", "")).strip().lower():
+        skills.delete(old)
+    s = skills.save(payload.get("name"), payload.get("when", ""), payload.get("steps"))
+    return {"ok": bool(s), "skills": [{"name": x["name"], "when": x["when"], "text": x["text"]}
+                                      for x in skills.all_skills()]}
+
+
+@app.delete("/skill")
+async def delete_skill(name: str) -> dict:
+    return {"ok": skills.delete(name)}
+
+
+@app.put("/routine")
+async def put_routine(payload: dict) -> dict:
+    old = payload.get("old_name")
+    if isinstance(old, str) and old.strip() and old.strip().lower() != str(payload.get("name", "")).strip().lower():
+        routines.remove(old)
+    r = routines.upsert(payload.get("name"), payload.get("time"), payload.get("days"),
+                        payload.get("prompt"), payload.get("enabled", True))
+    return {"ok": bool(r), "routines": routines.load()}
+
+
+@app.delete("/routine")
+async def delete_routine(name: str) -> dict:
+    return {"ok": routines.remove(name)}
 
 
 @app.get("/routines")

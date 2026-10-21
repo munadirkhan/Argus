@@ -7,6 +7,7 @@ import { moodOf, useArgus } from "../lib/store";
 import type { Mood } from "../lib/types";
 import { frame, gaze } from "../lib/layout";
 import { VIDEO_MODE } from '../lib/keyboard';
+import { useTheme } from '../lib/themes';
 
 /* Argus Panoptes: a black-figure orb of one hundred eyes. */
 
@@ -49,15 +50,18 @@ function fibonacci(n: number, r: number) {
 }
 
 /** Grungy terracotta glow -- the orange field behind black-figure pottery. */
-function useHaloTexture() {
+function useHaloTexture(glow: string) {
   return useMemo(() => {
     const c = document.createElement("canvas");
     c.width = c.height = 1024;
     const g = c.getContext("2d")!;
+    const n = parseInt(glow.slice(1), 16);
+    const tint = (k: number, a: number) =>
+      `rgba(${Math.round(((n >> 16) & 255) * k)},${Math.round(((n >> 8) & 255) * k)},${Math.round((n & 255) * k)},${a})`;
     const grad = g.createRadialGradient(512, 512, 0, 512, 512, 512);
-    grad.addColorStop(0, "rgba(232,126,48,0.62)");
-    grad.addColorStop(0.28, "rgba(190,92,34,0.42)");
-    grad.addColorStop(0.55, "rgba(110,46,18,0.16)");
+    grad.addColorStop(0, tint(0.9, 0.62));
+    grad.addColorStop(0.28, tint(0.74, 0.42));
+    grad.addColorStop(0.55, tint(0.43, 0.16));
     grad.addColorStop(1, "rgba(0,0,0,0)");
     g.fillStyle = grad;
     g.fillRect(0, 0, 1024, 1024);
@@ -75,7 +79,7 @@ function useHaloTexture() {
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
-  }, []);
+  }, [glow]);
 }
 
 function Orb({ mood, compact = false }: { mood: Mood; compact?: boolean }) {
@@ -123,6 +127,19 @@ function Orb({ mood, compact = false }: { mood: Mood; compact?: boolean }) {
     }),
     []
   );
+
+  // The colour theme repaints the eyes in place (no rebuild, no flicker).
+  const pal = useTheme((t) => t.palette);
+  useEffect(() => {
+    mats.sclera.color.set(pal.bone);
+    mats.sclera.emissive.set(pal.goldDim).multiplyScalar(0.6);
+    mats.iris.color.set(pal.iris);
+    mats.iris.emissive.set(pal.amber);
+    mats.rim.color.set(pal.gold).multiplyScalar(1.4);
+    mats.line.color.set(pal.gold);
+    mats.ring.color.set(pal.amber).multiplyScalar(2.2);
+    mats.bead.color.set(pal.glow).multiplyScalar(4);
+  }, [pal, mats]);
 
   const geo = useMemo(
     () => ({
@@ -267,7 +284,7 @@ function Orb({ mood, compact = false }: { mood: Mood; compact?: boolean }) {
 }
 
 function Halo() {
-  const tex = useHaloTexture();
+  const tex = useHaloTexture(useTheme((t) => t.palette.amber));
   const ref = useRef<THREE.Mesh>(null!);
   const mood = useArgus((s) => moodOf(s));
   useFrame((st, dt) => {
@@ -354,13 +371,14 @@ function BloomDriver({ mood }: { mood: Mood }) {
 
 function Scene({ compact = false }: { compact?: boolean }) {
   const mood = useArgus((s) => moodOf(s));
+  const pal = useTheme((t) => t.palette);
   return (
     <>
-      {!compact && <color attach="background" args={["#050407"]} />}
-      <ambientLight intensity={0.22} color="#ffd9b0" />
-      <directionalLight position={[2.5, 4, 6]} intensity={1.5} color={BONE} />
-      <pointLight position={[0, 1.2, -3.2]} intensity={40} distance={12} color={AMBER} />
-      <pointLight position={[-4, -1, 2]} intensity={6} distance={10} color="#8a3a12" />
+      {!compact && <color attach="background" args={[pal.void]} />}
+      <ambientLight intensity={0.22} color={pal.glow} />
+      <directionalLight position={[2.5, 4, 6]} intensity={1.5} color={pal.bone} />
+      <pointLight position={[0, 1.2, -3.2]} intensity={40} distance={12} color={pal.amber} />
+      <pointLight position={[-4, -1, 2]} intensity={6} distance={10} color={pal.goldDim} />
       {!compact && <Halo />}
       <group>
         <Orb mood={mood} compact={compact} />
@@ -370,15 +388,15 @@ function Scene({ compact = false }: { compact?: boolean }) {
         args={[40, 40]}
         cellSize={0.5}
         cellThickness={0.6}
-        cellColor="#4a2610"
+        cellColor={pal.grid}
         sectionSize={2.5}
         sectionThickness={1.15}
-        sectionColor="#ff7a1a"
+        sectionColor={pal.amber}
         fadeDistance={24}
         fadeStrength={1.7}
         infiniteGrid
       />}
-      {!compact && <Sparkles count={90} scale={[12, 6, 8]} position={[0, 1, -1]} size={2.2} speed={0.25} color="#ffb370" opacity={0.55} />}
+      {!compact && <Sparkles count={90} scale={[12, 6, 8]} position={[0, 1, -1]} size={2.2} speed={0.25} color={pal.glow} opacity={0.55} />}
       <CameraRig mood={mood} compact={compact} />
       {compact ? <Ticker fps={30} /> : <BloomDriver mood={mood} />}
     </>
@@ -386,9 +404,10 @@ function Scene({ compact = false }: { compact?: boolean }) {
 }
 
 export default function Panoptes({ compact = false }: { compact?: boolean }) {
+  const voidColor = useTheme((t) => t.palette.void);
   useEffect(() => {
-    if (!compact) document.body.style.background = "#050407";
-  }, [compact]);
+    if (!compact) document.body.style.background = voidColor;
+  }, [compact, voidColor]);
   return (
     <div className={compact ? "panoptes-canvas compact" : "panoptes-canvas"} aria-hidden>
       <Canvas

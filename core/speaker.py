@@ -26,6 +26,13 @@ _kokoro = None
 _lock = threading.Lock()
 
 
+def configure(name: str | None = None, speed: float | None = None) -> None:
+    """Settings override .env: None means back to the .env / built-in value."""
+    global DEFAULT_VOICE, SPEED
+    DEFAULT_VOICE = name or os.environ.get("ARGUS_VOICE", "bm_george")
+    SPEED = float(speed if speed is not None else os.environ.get("ARGUS_VOICE_SPEED", "1.0"))
+
+
 class VoiceUnavailable(RuntimeError):
     pass
 
@@ -99,10 +106,10 @@ def _wav(samples, rate: int) -> bytes:
     return buf.getvalue()
 
 
-def _kokoro_say(text: str, voice: str) -> bytes:
+def _kokoro_say(text: str, voice: str, speed: float | None = None) -> bytes:
     k = _load()
     lang = "en-gb" if voice.startswith("b") else "en-us"
-    samples, rate = k.create(text, voice=voice, speed=SPEED, lang=lang)
+    samples, rate = k.create(text, voice=voice, speed=speed or SPEED, lang=lang)
     return _wav(samples, rate)
 
 
@@ -134,14 +141,14 @@ def _sapi_say(text: str) -> bytes:
             pass
 
 
-async def say(text: str, voice: str | None = None) -> tuple[bytes, str]:
+async def say(text: str, voice: str | None = None, speed: float | None = None) -> tuple[bytes, str]:
     """Synthesize speech. Returns (wav bytes, engine used)."""
     text = clean(text)
     if not text:
         raise VoiceUnavailable("nothing to say")
     eng = engine()
     if eng == "kokoro":
-        return await asyncio.to_thread(_kokoro_say, text, voice or DEFAULT_VOICE), eng
+        return await asyncio.to_thread(_kokoro_say, text, voice or DEFAULT_VOICE, speed), eng
     if eng == "sapi":
         return await asyncio.to_thread(_sapi_say, text), eng
     raise VoiceUnavailable("no text-to-speech engine on this machine")

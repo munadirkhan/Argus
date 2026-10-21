@@ -8,6 +8,7 @@ import { moodOf, useArgus } from "../lib/store";
 import { voice, type VoiceState } from "../lib/voice";
 import { speaker } from "../lib/speaker";
 import { useVoiceOut } from "../lib/useVoiceOut";
+import { syncSettings } from "../lib/settings";
 
 /* The floating orb: Argus while you are anywhere else -- a browser, a game,
  * a video. Always on top, tiny, draggable; click it to open the hub. When it
@@ -41,6 +42,9 @@ export default function OrbApp() {
   // On the desktop, the orb is the one that talks: it is always running,
   // whether or not the hub is open.
   useVoiceOut(Boolean(desktop));
+  useEffect(() => useArgus.subscribe((s, prev) => {
+    if (s.conn === "live" && prev.conn !== "live") void syncSettings();
+  }), []);
   useEffect(() => { void hotkeys().then((h) => setTalkKey(keyLabel(h.talk))); }, []);
 
   const mood = useArgus((s) => moodOf(s));

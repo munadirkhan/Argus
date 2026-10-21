@@ -25,4 +25,9 @@ contextBridge.exposeInMainWorld("argusDesktop", {
   onVoiceOut: (cb) => listen("voice:out", (on) => cb(Boolean(on))),
   hush: () => ipcRenderer.send("voice:hush"),
   onHush: (cb) => listen("voice:hush", () => cb()),
+  getShell: () => ipcRenderer.invoke("shell:get"),
+  setShell: (key, value) => ipcRenderer.invoke("shell:set", String(key), value),
+  chooseFolder: () => ipcRenderer.invoke("shell:choose-folder"),
+  notifySettings: () => ipcRenderer.send("settings:changed"),
+  onSettings: (cb) => listen("settings:changed", () => cb()),
 });

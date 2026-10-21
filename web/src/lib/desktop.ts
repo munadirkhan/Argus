@@ -32,6 +32,22 @@ export interface DesktopBridge {
   /** Silence Argus's voice in every window. */
   hush?(): void;
   onHush?(cb: () => void): () => void;
+  /** Settings that belong to the desktop shell rather than the core. */
+  getShell?(): Promise<ShellSettings>;
+  setShell?(key: keyof ShellSettings, value: unknown): Promise<ShellSettings>;
+  chooseFolder?(): Promise<ShellSettings>;
+  /** Tell the other window the core's settings changed; and hear about it. */
+  notifySettings?(): void;
+  onSettings?(cb: () => void): () => void;
+}
+
+export interface ShellSettings {
+  fullAccess: boolean;
+  orbEnabled: boolean;
+  voiceOut: boolean;
+  openAtLogin: boolean;
+  workspace: string;
+  hotkeys: { hub: string | null; talk: string | null };
 }
 
 /** "CommandOrControl+Alt+J" -> "Ctrl+Alt+J" (or ⌘ on macOS). */

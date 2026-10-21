@@ -241,12 +241,12 @@ function Beam({ side }: { side: "left" | "right" | null }) {
     <svg className="beam" width={zone.width} height={zone.height}>
       <defs>
         <linearGradient id="beamg" x1={x1} y1={y1} x2={x2} y2={y2} gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#ff8a2a" stopOpacity="0.9" />
-          <stop offset="1" stopColor="#ffd29a" stopOpacity="0.15" />
+          <stop offset="0" style={{ stopColor: "var(--amber)" }} stopOpacity="0.9" />
+          <stop offset="1" style={{ stopColor: "var(--bone)" }} stopOpacity="0.15" />
         </linearGradient>
       </defs>
       <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="url(#beamg)" strokeWidth="1.2" className="beam-line" />
-      <circle cx={x2} cy={y2} r="3" fill="#ff8a2a" className="beam-dot" />
+      <circle cx={x2} cy={y2} r="3" style={{ fill: "var(--amber)" }} className="beam-dot" />
     </svg>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Panoptes from "./scene/Panoptes";
 import Header from "./components/Header";
 import Oracles from "./components/Oracles";
@@ -11,6 +11,8 @@ import SightWindows from "./components/Sight";
 import Tape from "./components/Tape";
 import ModeNote from "./components/ModeNote";
 import ApprovalCard from "./components/ApprovalCard";
+import Sanctum from "./components/Sanctum";
+import { syncSettings } from "./lib/settings";
 import { detectMode } from "./lib/mode";
 import { desktop } from "./lib/desktop";
 import { useVoiceOut } from "./lib/useVoiceOut";
@@ -37,6 +39,11 @@ export default function App() {
   const zone = useRef<HTMLDivElement>(null);
   // In a plain browser the hub talks; on the desktop the orb does.
   useVoiceOut(!desktop);
+  const [sanctum, setSanctum] = useState(false);
+  // The theme lives in the core's settings: pick it up whenever we (re)connect.
+  useEffect(() => useArgus.subscribe((s, prev) => {
+    if (s.conn === "live" && prev.conn !== "live") void syncSettings();
+  }), []);
   useEffect(() => {
     // No core to reach (public page, or no key yet): play a session instead.
     void detectMode().then((mode) => switchSource(mode === "live" ? "live" : "replay"));
@@ -45,6 +52,9 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('video-mode', VIDEO_MODE);
     const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === ",") {
+        event.preventDefault(); setSanctum((o) => !o); return;
+      }
       if (event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || isTyping(event.target)) return;
       if (event.shiftKey && event.key.toLowerCase() === 'r') {
         event.preventDefault(); toggleRecording(); return;
@@ -68,7 +78,7 @@ export default function App() {
     <>
       <Panoptes />
       <div className="shell">
-        <Header />
+        <Header onSettings={() => setSanctum(true)} />
         <Tape />
         <aside className="col">
           <Oracles />
@@ -89,6 +99,7 @@ export default function App() {
           <Archive />
         </aside>
       </div>
+      <Sanctum open={sanctum} onClose={() => setSanctum(false)} />
     </>
   );
 }
