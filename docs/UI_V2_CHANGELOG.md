@@ -26,11 +26,24 @@ the hundred-eyed sphere, Greek branding, and all six colour themes.
 | Mode notices | Compact, wrapping replay/offline/key notices and consistent action buttons. |
 | Sanctum | Restyled navigation, fields, toggles, sliders, buttons, feedback, theme tiles, memory rows, skill editors, routine forms, and hotkey rows across all 11 sections. |
 | Floating orb cards | Matching typography and controls, less glow, room reserved for actions, constrained approval detail, and a readable scrolling answer panel. Orb dimensions remain 168×168; cards remain 340×146; answers remain 480×440. |
-| 3D scene | Lower bloom and halo intensity, quieter grid and particles, subtler rings and highlights. Eye count, gaze, animation timing, mood transitions, and drag/click behaviour are unchanged. Orb body and pupils now follow the active palette too. |
+| 3D scene | Lower bloom and halo intensity, quieter particles, subtler rings and highlights. The original prominent floor grid is retained behind the orb and panels. Eye count, gaze, animation timing, mood transitions, and drag/click behaviour are unchanged. Orb body and pupils now follow the active palette too. |
 | Themes | Removed fixed presentation colours from UI surfaces, shadows, code accents, STOP controls, and eye glyphs. Existing palette variables drive all six themes; palette definitions are unchanged. |
 | Motion | CSS decoration and transitions respect the system reduced-motion preference. The existing 3D animation remains active. |
 
 ## Files changed
+
+### Follow-up: restore the floor grid
+
+Restored the original grid line thickness, brighter theme-accent major lines,
+24-unit fade distance, and original fade strength after Darsh requested the
+previous grid appearance. The rest of the UI v2 styling stays in place. Earlier
+screenshots below show the initial, quieter grid; the grid-restored screenshots
+show this follow-up.
+
+Verified with TypeScript checking, a production build, and isolated browser
+screenshots at 1920×1080 and 1280×720, with no page errors or horizontal overflow.
+
+### Implementation files
 
 - `web/src/styles.css` — shared presentation and responsive layouts.
 - `web/src/components/Header.tsx` — replay scenarios moved to their own row; existing handlers retained.
@@ -143,6 +156,8 @@ and personal workflow checks should also be tested on your normal setup.
 
 ### Screenshots
 
+- [Restored grid, 1920×1080](../web/evidence/ui-v2/grid-restored-1920.png)
+- [Restored grid, 1280×720](../web/evidence/ui-v2/grid-restored-1280.png)
 - [Hub, 1920×1080](../web/evidence/ui-v2/hub-1920.png)
 - [Laptop replay, 1280×720](../web/evidence/ui-v2/hub-1280.png)
 - [All six themes](../web/evidence/ui-v2/themes.png)

@@ -388,13 +388,13 @@ function Scene({ compact = false }: { compact?: boolean }) {
         position={[0, -1.45, 0]}
         args={[40, 40]}
         cellSize={0.5}
-        cellThickness={0.35}
+        cellThickness={0.6}
         cellColor={pal.grid}
         sectionSize={2.5}
-        sectionThickness={0.6}
-        sectionColor={pal.grid}
-        fadeDistance={16}
-        fadeStrength={2.5}
+        sectionThickness={1.15}
+        sectionColor={pal.amber}
+        fadeDistance={24}
+        fadeStrength={1.7}
         infiniteGrid
       />}
       {!compact && <Sparkles count={35} scale={[12, 6, 8]} position={[0, 1, -1]} size={1.4} speed={0.25} color={pal.glow} opacity={0.25} />}
