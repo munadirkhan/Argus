@@ -55,15 +55,6 @@ export default function Header({ onSettings }: { onSettings?: () => void }) {
             title={mode === "hosted" ? "Live runs on your desktop — see GitHub" : mode === "needs-key" ? "Add your Nebius key to go live" : undefined}>LIVE</button>
           <button aria-pressed={sim} onClick={() => switchSource("replay")}>SIMULATE</button>
         </div>
-        {sim && (
-          <div className="seg scen" role="group" aria-label="Scenario">
-            {Object.values(SCENARIOS).map((s) => (
-              <button key={s.id} aria-pressed={scenario === s.id} title={s.blurb} onClick={() => startReplay(s.id)}>
-                {s.name.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        )}
         {onSettings && (
           <button className="sanctum-btn" onClick={onSettings} title="Settings: theme, voice, models, memory... (Ctrl+,)">
             <span className="glyph">☼</span>SANCTUM
@@ -94,6 +85,18 @@ export default function Header({ onSettings }: { onSettings?: () => void }) {
           </span>
         )}
       </div>
+      {sim && (
+        <div className="scenario-bar">
+          <span className="scenario-label">SESSIONS</span>
+          <div className="seg scen" role="group" aria-label="Scenario">
+            {Object.values(SCENARIOS).map((s) => (
+              <button key={s.id} aria-pressed={scenario === s.id} title={s.blurb} onClick={() => startReplay(s.id)}>
+                {s.name.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </header>
   );
 }

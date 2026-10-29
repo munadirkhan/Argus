@@ -14,18 +14,14 @@ import { useTheme } from '../lib/themes';
 const EYES = 100;
 const R = 1.5;
 const ER = 0.1; // eyeball radius
-const BONE = "#efe4cc";
-const GOLD = "#d6a04c";
-const AMBER = "#ff8a2a";
-const IRIS = "#5a1c0a";
 
 type Params = { glow: number; spin: number; ring: number; follow: number; bloom: number; saccade: number };
 const MOODS: Record<Mood, Params> = {
-  idle:       { glow: 1.0, spin: 0.05, ring: 0.12, follow: 0.55, bloom: 0.85, saccade: 0.0 },
-  observe:    { glow: 1.6, spin: 0.09, ring: 0.45, follow: 0.4,  bloom: 1.05, saccade: 0.45 },
-  deliberate: { glow: 2.6, spin: 0.13, ring: 1.0,  follow: 0.22, bloom: 1.45, saccade: 0.12 },
-  act:        { glow: 1.9, spin: 0.1,  ring: 0.65, follow: 0.3,  bloom: 1.2,  saccade: 0.9 },
-  gaze:       { glow: 3.6, spin: 0.012, ring: 0.2, follow: 1.0,  bloom: 1.9,  saccade: 0.0 },
+  idle:       { glow: 0.8, spin: 0.05, ring: 0.12, follow: 0.55, bloom: 0.45, saccade: 0.0 },
+  observe:    { glow: 1.3, spin: 0.09, ring: 0.45, follow: 0.4,  bloom: 0.65, saccade: 0.45 },
+  deliberate: { glow: 2.1, spin: 0.13, ring: 1.0,  follow: 0.22, bloom: 0.9,  saccade: 0.12 },
+  act:        { glow: 1.6, spin: 0.1,  ring: 0.65, follow: 0.3,  bloom: 0.75, saccade: 0.9 },
+  gaze:       { glow: 2.8, spin: 0.012, ring: 0.2, follow: 1.0,  bloom: 1.15, saccade: 0.0 },
 };
 
 // Pointer tracked on window so panels layered over the canvas don't blind the eyes.
@@ -109,36 +105,41 @@ function Orb({ mood, compact = false }: { mood: Mood; compact?: boolean }) {
   }, [points]);
 
   const mats = useMemo(
-    () => ({
-      body: new THREE.MeshStandardMaterial({ color: "#0b0908", roughness: 0.8, metalness: 0.25 }),
-      sclera: new THREE.MeshStandardMaterial({
-        color: BONE, emissive: new THREE.Color("#5a3a1c"), emissiveIntensity: 0.35, roughness: 0.4,
-      }),
-      iris: new THREE.MeshStandardMaterial({
-        color: IRIS, emissive: new THREE.Color(AMBER), emissiveIntensity: 1, roughness: 0.3,
-      }),
-      pupil: new THREE.MeshBasicMaterial({ color: "#000000" }),
-      rim: new THREE.MeshBasicMaterial({ color: new THREE.Color(GOLD).multiplyScalar(1.4), toneMapped: false }),
-      line: new THREE.MeshBasicMaterial({
-        color: new THREE.Color(GOLD), transparent: true, opacity: 0.32, toneMapped: false,
-      }),
-      ring: new THREE.MeshBasicMaterial({ color: new THREE.Color(AMBER).multiplyScalar(2.2), toneMapped: false }),
-      bead: new THREE.MeshBasicMaterial({ color: new THREE.Color("#ffd29a").multiplyScalar(4), toneMapped: false }),
-    }),
+    () => {
+      const initial = useTheme.getState().palette;
+      return {
+        body: new THREE.MeshStandardMaterial({ color: initial.void, roughness: 0.72, metalness: 0.3 }),
+        sclera: new THREE.MeshStandardMaterial({
+          color: initial.bone, emissive: new THREE.Color(initial.goldDim), emissiveIntensity: 0.25, roughness: 0.4,
+        }),
+        iris: new THREE.MeshStandardMaterial({
+          color: initial.iris, emissive: new THREE.Color(initial.amber), emissiveIntensity: 0.8, roughness: 0.3,
+        }),
+        pupil: new THREE.MeshBasicMaterial({ color: initial.void }),
+        rim: new THREE.MeshBasicMaterial({ color: new THREE.Color(initial.gold).multiplyScalar(1.15), toneMapped: false }),
+        line: new THREE.MeshBasicMaterial({
+          color: new THREE.Color(initial.gold), transparent: true, opacity: 0.18, toneMapped: false,
+        }),
+        ring: new THREE.MeshBasicMaterial({ color: new THREE.Color(initial.amber).multiplyScalar(1.4), toneMapped: false }),
+        bead: new THREE.MeshBasicMaterial({ color: new THREE.Color(initial.glow).multiplyScalar(2.5), toneMapped: false }),
+      };
+    },
     []
   );
 
   // The colour theme repaints the eyes in place (no rebuild, no flicker).
   const pal = useTheme((t) => t.palette);
   useEffect(() => {
+    mats.body.color.set(pal.void);
+    mats.pupil.color.set(pal.void);
     mats.sclera.color.set(pal.bone);
     mats.sclera.emissive.set(pal.goldDim).multiplyScalar(0.6);
     mats.iris.color.set(pal.iris);
     mats.iris.emissive.set(pal.amber);
-    mats.rim.color.set(pal.gold).multiplyScalar(1.4);
+    mats.rim.color.set(pal.gold).multiplyScalar(1.15);
     mats.line.color.set(pal.gold);
-    mats.ring.color.set(pal.amber).multiplyScalar(2.2);
-    mats.bead.color.set(pal.glow).multiplyScalar(4);
+    mats.ring.color.set(pal.amber).multiplyScalar(1.4);
+    mats.bead.color.set(pal.glow).multiplyScalar(2.5);
   }, [pal, mats]);
 
   const geo = useMemo(
@@ -289,14 +290,14 @@ function Halo() {
   const mood = useArgus((s) => moodOf(s));
   useFrame((st, dt) => {
     const m = ref.current.material as THREE.MeshBasicMaterial;
-    const goal = mood === "gaze" ? 1 : mood === "deliberate" ? 0.92 : 0.72;
+    const goal = mood === "gaze" ? 0.6 : mood === "deliberate" ? 0.48 : 0.3;
     m.opacity += (goal - m.opacity) * (1 - Math.exp(-dt * 2));
     ref.current.scale.setScalar(15 + Math.sin(st.clock.elapsedTime * 0.4) * 0.25);
   });
   return (
     <mesh ref={ref} position={[0, 1.0, -5]}>
       <planeGeometry args={[1, 1]} />
-      <meshBasicMaterial map={tex} transparent opacity={0.72} depthWrite={false} toneMapped={false} />
+      <meshBasicMaterial map={tex} transparent opacity={0.3} depthWrite={false} toneMapped={false} />
     </mesh>
   );
 }
@@ -362,8 +363,8 @@ function BloomDriver({ mood }: { mood: Mood }) {
   });
   return (
     <EffectComposer multisampling={4}>
-      <Bloom ref={ref as never} mipmapBlur intensity={0.85} luminanceThreshold={0.32} luminanceSmoothing={0.25} />
-      <Noise opacity={0.045} />
+      <Bloom ref={ref as never} mipmapBlur intensity={0.45} luminanceThreshold={0.45} luminanceSmoothing={0.25} />
+      <Noise opacity={0.018} />
       <Vignette offset={0.22} darkness={0.82} />
     </EffectComposer>
   );
@@ -387,16 +388,16 @@ function Scene({ compact = false }: { compact?: boolean }) {
         position={[0, -1.45, 0]}
         args={[40, 40]}
         cellSize={0.5}
-        cellThickness={0.6}
+        cellThickness={0.35}
         cellColor={pal.grid}
         sectionSize={2.5}
-        sectionThickness={1.15}
-        sectionColor={pal.amber}
-        fadeDistance={24}
-        fadeStrength={1.7}
+        sectionThickness={0.6}
+        sectionColor={pal.grid}
+        fadeDistance={16}
+        fadeStrength={2.5}
         infiniteGrid
       />}
-      {!compact && <Sparkles count={90} scale={[12, 6, 8]} position={[0, 1, -1]} size={2.2} speed={0.25} color={pal.glow} opacity={0.55} />}
+      {!compact && <Sparkles count={35} scale={[12, 6, 8]} position={[0, 1, -1]} size={1.4} speed={0.25} color={pal.glow} opacity={0.25} />}
       <CameraRig mood={mood} compact={compact} />
       {compact ? <Ticker fps={30} /> : <BloomDriver mood={mood} />}
     </>

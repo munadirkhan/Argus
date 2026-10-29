@@ -24,8 +24,8 @@ export function EyeGlyph({ size = 22, lit = false }: { size?: number; lit?: bool
   return (
     <svg width={size} height={size * 0.62} viewBox="0 0 64 40" aria-hidden style={{ overflow: "visible" }}>
       <path d="M3 20 Q32 -6 61 20 Q32 46 3 20Z" style={{ fill: "var(--void)", stroke: "var(--gold)" }} strokeWidth="2.6" />
-      <circle cx="32" cy="20" r="11" style={{ fill: "color-mix(in srgb, var(--amber) 28%, #000)", stroke: lit ? "var(--amber)" : "var(--gold-dim)" }} strokeWidth="2.4" />
-      <circle cx="32" cy="20" r="4.6" fill="#000" />
+      <circle cx="32" cy="20" r="11" style={{ fill: "color-mix(in srgb, var(--amber) 28%, var(--void))", stroke: lit ? "var(--amber)" : "var(--gold-dim)" }} strokeWidth="2.4" />
+      <circle cx="32" cy="20" r="4.6" style={{ fill: "var(--void)" }} />
       <circle cx="35.5" cy="16.5" r="1.8" style={{ fill: "var(--bone)" }} opacity=".85" />
       {lit && <circle cx="32" cy="20" r="11" fill="none" style={{ stroke: "var(--amber)" }} strokeWidth="1" opacity=".6">
         <animate attributeName="r" values="11;17;11" dur="2.6s" repeatCount="indefinite" />
