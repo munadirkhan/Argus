@@ -1,10 +1,12 @@
 # ARGUS
 
-An always-on AI agent that lives on your computer, notices what you're working
-on, and does real research work about it without being asked.
+**A Really Good User System.**
 
-Argus Panoptes was the hundred-eyed giant who never slept. This is the same idea
-with a cost ceiling.
+An always-on AI agent that lives on your computer, notices what you're working
+on, and does real work about it, often before you ask.
+
+The name comes from Argus Panoptes, the hundred-eyed giant of Greek myth who
+never slept. This is the same idea, with a cost ceiling.
 
 Built for the Nebius x NVIDIA Global AI Hackathon on **NVIDIA Nemotron** models
 served through **Nebius Token Factory**.

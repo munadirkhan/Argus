@@ -41,6 +41,9 @@ PORT = int(os.environ.get("PORT", "7600"))
 # opens it up -- only do that on a network you trust.
 HOST = os.environ.get("ARGUS_HOST", "127.0.0.1")
 USE_FAKE = os.environ.get("ARGUS_FAKE", "").lower() in ("1", "true", "yes")
+# Scripted demo for recording the video: a director plays believable runs
+# through the real app, no model calls (core/demo.py).
+DEMO = os.environ.get("ARGUS_DEMO", "").lower() in ("1", "true", "yes")
 LEDGER_PATH = os.environ.get(
     "ARGUS_SPEND_FILE",
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -53,7 +56,7 @@ class Session:
     def __init__(self, root: str, runtime: str = "local", label: str = "") -> None:
         self.root = os.path.abspath(root)
         self.runtime = runtime
-        self.label = label or os.path.basename(self.root) or "this machine"
+        self.label = "scripted demo" if DEMO else (label or os.path.basename(self.root) or "this machine")
         self.bus = EventBus()
         self.registry = Registry()
 
@@ -75,6 +78,10 @@ class Session:
         self.watcher = Watcher(self.router, self.bus, self.root,
                                interval=WATCH_INTERVAL, cooldown=WATCH_COOLDOWN)
         self.sensors = Sensors()
+        self.director = None
+        if DEMO:
+            from .demo import Director
+            self.director = Director(self)
         self.watcher.context_fn = self.sensors.context
         self._agent_lock = asyncio.Lock()
         self._agent_task: asyncio.Task | None = None
@@ -95,7 +102,7 @@ class Session:
         self.router.budget_usd = (s["budget_usd"] if s["budget_usd"] is not None
                                   else float(os.environ.get("ARGUS_BUDGET_USD", "10")))
         speaker.configure(s["voice"]["name"], s["voice"]["speed"])
-        self.watcher.muted = not s["watcher"]["enabled"]
+        self.watcher.muted = DEMO or not s["watcher"]["enabled"]   # the director does the noticing in a demo
         self.watcher.interval = s["watcher"]["interval"]
         self.watcher.cooldown = s["watcher"]["cooldown"]
 
@@ -106,10 +113,10 @@ class Session:
         print("[argus] sensors: %s" % (", ".join(self.sensors.names) or "(none)"), flush=True)
         print("[argus] vision: %s" % (self.router.vision[0] if self.router.vision else "(none)"),
               flush=True)
-        if voice.available() and not USE_FAKE:
+        if voice.available() and (DEMO or not USE_FAKE):
             # Load the speech model in the background so the first command is fast.
             asyncio.get_running_loop().run_in_executor(None, voice.warm)
-        if not USE_FAKE:
+        if DEMO or not USE_FAKE:
             asyncio.get_running_loop().run_in_executor(None, speaker.warm)
         # Starter skills and the morning briefing -- in the user's real home, so
         # never from a scripted test run unless it points them somewhere else.
@@ -121,8 +128,9 @@ class Session:
         await self.bus.emit(events.session_state(
             self.runtime, "connected", self.root, self.label))
         self._watch_task = asyncio.create_task(self.watcher.run_forever())
-        self._sense_task = asyncio.create_task(
-            self.sensors.run_forever(self.bus.emit, self.on_sensor_alert))
+        if not DEMO:                      # in a demo, what Argus "sees" is scripted
+            self._sense_task = asyncio.create_task(
+                self.sensors.run_forever(self.bus.emit, self.on_sensor_alert))
 
     async def on_sensor_alert(self, sensor, event: dict) -> None:
         """A sensor saw something urgent (e.g. a stack trace). Wake the watcher
@@ -190,6 +198,8 @@ class Session:
             obs_id = str(msg.get("id", ""))
             if obs_id:
                 self.watcher.dismiss(obs_id)
+        elif kind == "user.accept" and DEMO and str(msg.get("id", "")) in self.director.offers:
+            asyncio.create_task(self._run_agent("__accept__:" + str(msg.get("id")), display="Go ahead."))
         elif kind == "user.accept":
             obs_id = str(msg.get("id", ""))
             # Accept works even after a dismiss: the user is allowed to change
@@ -232,7 +242,9 @@ class Session:
             was_enabled = self.watcher.enabled
             self.watcher.enabled = False          # do not interrupt itself
             try:
-                if screen:
+                if self.director:
+                    await self.director.run(text, display, attachments, screen)
+                elif screen:
                     await self.agent.answer_screen(screen, text)
                 else:
                     await self.agent.run(text, display=display, attachments=attachments)
@@ -479,6 +491,17 @@ async def put_routine(payload: dict) -> dict:
 @app.delete("/routine")
 async def delete_routine(name: str) -> dict:
     return {"ok": routines.remove(name)}
+
+
+@app.post("/demo/cue")
+async def demo_cue(payload: dict) -> dict:
+    """Scripted demo only: the presenter's hidden hotkeys make Argus notice something."""
+    if not session.director:
+        return {"ok": False, "error": "not in demo mode"}
+    if session._agent_lock.locked():
+        return {"ok": False, "error": "busy"}
+    asyncio.create_task(session.director.cue(str(payload.get("beat", ""))))
+    return {"ok": True}
 
 
 @app.post("/snap")

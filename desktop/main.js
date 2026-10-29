@@ -678,6 +678,13 @@ app.whenReady().then(async () => {
   hotkeys.hub = registerFirst(HUB_KEYS, toggleHub);
   hotkeys.talk = registerFirst(TALK_KEYS, talk);
   hotkeys.snap = registerFirst(SNAP_KEYS, snap);
+  // Scripted demo (ARGUS_DEMO=1): two hidden keys make Argus "notice" things on cue.
+  if (/^(1|true|yes)$/i.test(process.env.ARGUS_DEMO || "")) {
+    const cue = (beat) => postBytes("/demo/cue", Buffer.from(JSON.stringify({ beat })), "application/json");
+    registerFirst(["CommandOrControl+Alt+1"], () => cue("markets"));
+    registerFirst(["CommandOrControl+Alt+2"], () => cue("code"));
+    console.log("[argus] scripted demo: Ctrl+Alt+1 = markets, Ctrl+Alt+2 = dashboard crash");
+  }
   console.log("[argus] hotkeys: hub=%s talk=%s", hotkeys.hub, hotkeys.talk);
   refreshTray();
 

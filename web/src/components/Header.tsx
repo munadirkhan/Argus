@@ -38,7 +38,7 @@ export default function Header({ onSettings }: { onSettings?: () => void }) {
         <EyeGlyph size={34} lit={mood !== "idle"} />
         <div>
           <div className="name">ARGUS</div>
-          <div className="sub">PANOPTES · THE HUNDRED-EYED</div>
+          <div className="sub" title="Named for Argus Panoptes, the hundred-eyed watchman of Greek myth who never slept.">A REALLY GOOD USER SYSTEM</div>
         </div>
       </div>
 

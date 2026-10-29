@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CI · build failed · desk-dashboard</title>
+<style>
+  :root { --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --dim: #7d8590; --red: #f85149; --yellow: #d29922; --green: #3fb950; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .x { width: 22px; height: 22px; border-radius: 50%; background: var(--red); display: grid; place-items: center; font-weight: 700; color: #fff; font-size: 13px; }
+  h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  .meta { color: var(--dim); font-size: 13px; margin-left: auto; }
+  main { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 53px); }
+  nav { border-right: 1px solid var(--line); padding: 16px; }
+  nav div { padding: 8px 10px; border-radius: 6px; color: var(--dim); }
+  nav div.on { background: var(--panel); color: var(--text); }
+  nav .fail::before { content: "✕ "; color: var(--red); }
+  nav .ok::before { content: "✓ "; color: var(--green); }
+  section { padding: 16px 24px; }
+  .step { border: 1px solid var(--line); border-radius: 6px; margin-bottom: 10px; overflow: hidden; }
+  .step h2 { margin: 0; padding: 10px 14px; font-size: 14px; background: var(--panel); }
+  .step.failed h2::before { content: "✕  "; color: var(--red); }
+  .step.passed h2::before { content: "✓  "; color: var(--green); }
+  pre { margin: 0; padding: 12px 14px; font: 13px/1.6 "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; color: var(--text); }
+  .err { color: var(--red); } .warn { color: var(--yellow); } .dim { color: var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <div class="x">✕</div>
+  <h1>build · Upgrade to React 19</h1>
+  <span class="meta">desk-dashboard · #142 · failed in 38s</span>
+</header>
+<main>
+  <nav>
+    <div class="ok">Set up job</div>
+    <div class="ok">Checkout</div>
+    <div class="ok">Setup Node 22</div>
+    <div class="fail on">Install dependencies</div>
+    <div>Build</div>
+    <div>Test</div>
+  </nav>
+  <section>
+    <div class="step passed"><h2>Setup Node 22</h2></div>
+    <div class="step failed">
+      <h2>Install dependencies</h2>
+<pre><span class="dim">Run npm ci</span>
+<span class="err">npm error code ERESOLVE</span>
+<span class="err">npm error ERESOLVE could not resolve</span>
+npm error
+npm error While resolving: desk-dashboard@0.4.0
+npm error Found: react@19.1.0
+npm error node_modules/react
+npm error   react@"^19.1.0" from the root project
+npm error
+npm error Could not resolve dependency:
+npm error <span class="warn">peer react@"^18.0.0" from react-markdown@8.0.7</span>
+npm error node_modules/react-markdown
+npm error   react-markdown@"^8.0.7" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+<span class="err">Error: Process completed with exit code 1.</span></pre>
+    </div>
+    <div class="step"><h2 class="dim">Build</h2></div>
+    <div class="step"><h2 class="dim">Test</h2></div>
+  </section>
+</main>
+</body>
+</html>
