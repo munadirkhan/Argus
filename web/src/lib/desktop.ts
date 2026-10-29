@@ -10,7 +10,11 @@ export interface DesktopBridge {
   /** Floating orb drag: the main process follows the cursor between start/end. */
   orbDrag(phase: "start" | "end"): void;
   /** Grow the floating orb into orb + card, or shrink back. Resolves to the side the card opens on. */
-  orbExpand(expanded: boolean): Promise<OrbSide>;
+  orbExpand(expanded: boolean, big?: boolean): Promise<OrbSide>;
+  /** Which way the big answer panel grew (away from the nearer screen edge). */
+  onOrbGrow?(cb: (dir: "up" | "down") => void): () => void;
+  /** The screen-snapshot key: started (Argus is looking) or failed. */
+  onSnap?(cb: (e: { phase: "started" | "failed"; error?: string }) => void): () => void;
   /** Fired by the global push-to-talk hotkey. Returns an unsubscribe. */
   onVoiceToggle(cb: () => void): () => void;
   /** Fired when the orb's card side changes (orb dragged across the screen centre). */
@@ -18,7 +22,7 @@ export interface DesktopBridge {
   /** Fired when the floating orb window is shown or hidden. */
   onOrbVisible(cb: (visible: boolean) => void): () => void;
   /** The global hotkeys that actually registered (another app may own the first choice). */
-  getHotkeys(): Promise<{ hub: string | null; talk: string | null }>;
+  getHotkeys(): Promise<{ hub: string | null; talk: string | null; snap?: string | null }>;
   /** Whether the core is waiting for a Nebius key in .env. */
   getSetup(): Promise<{ needsKey: boolean }>;
   /** Open .env in an editor (created from .env.example if missing). Never reads it back. */

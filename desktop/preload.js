@@ -12,7 +12,8 @@ contextBridge.exposeInMainWorld("argusDesktop", {
   platform: process.platform,
   openHub: () => ipcRenderer.send("hub:open"),
   orbDrag: (phase) => ipcRenderer.send("orb:drag", phase === "end" ? "end" : "start"),
-  orbExpand: (expanded) => ipcRenderer.invoke("orb:expand", Boolean(expanded)),
+  orbExpand: (expanded, big) => ipcRenderer.invoke("orb:expand", Boolean(expanded), Boolean(big)),
+  onOrbGrow: (cb) => listen("orb:grow", (d) => cb(d === "up" ? "up" : "down")),
   onVoiceToggle: (cb) => listen("voice:toggle", () => cb()),
   onOrbSide: (cb) => listen("orb:side", (side) => cb(side === "right" ? "right" : "left")),
   onOrbVisible: (cb) => listen("orb:visible", (v) => cb(Boolean(v))),
@@ -30,4 +31,9 @@ contextBridge.exposeInMainWorld("argusDesktop", {
   chooseFolder: () => ipcRenderer.invoke("shell:choose-folder"),
   notifySettings: () => ipcRenderer.send("settings:changed"),
   onSettings: (cb) => listen("settings:changed", () => cb()),
+  onSnap: (cb) => {
+    const a = listen("snap:started", () => cb({ phase: "started" }));
+    const b = listen("snap:failed", (why) => cb({ phase: "failed", error: String(why || "") }));
+    return () => { a(); b(); };
+  },
 });

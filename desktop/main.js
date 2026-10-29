@@ -15,7 +15,7 @@
  */
 const {
   app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen,
-  nativeImage, dialog, session, shell, protocol, net,
+  nativeImage, dialog, session, shell, protocol, net, desktopCapturer,
 } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
@@ -43,6 +43,7 @@ const UI_URL = process.env.ARGUS_UI_URL || (DEV ? "http://localhost:5173" : null
 
 const ORB = 168;          // the orb's square
 const CARD = 340;         // the card that slides out beside it
+const BIG_CARD = { w: 480, h: 440 };   // the answer panel
 const MARGIN = 24;
 
 if (TEST) {
@@ -65,6 +66,7 @@ let core = null;          // child process, only if we started it
 let coreRoot = "";
 let quitting = false;
 let orbExpanded = false;
+let orbBig = false;       // the answer panel (screen answers): wider and taller
 let orbSide = "left";
 let orbAnchor = null;     // top-left of the orb's square, in screen DIPs
 let drag = null;
@@ -270,10 +272,17 @@ function applyOrbBounds() {
   const wa = screen.getDisplayNearestPoint({ x: orbAnchor.x + ORB / 2, y: orbAnchor.y + ORB / 2 }).workArea;
   // The card opens toward the middle of the screen, so it never runs off the edge.
   const side = orbAnchor.x + ORB / 2 > wa.x + wa.width / 2 ? "left" : "right";
+  const big = orbExpanded && orbBig;
+  const W = big ? BIG_CARD.w : CARD;
+  const H = big ? BIG_CARD.h : ORB;
+  // A tall panel grows away from the nearer screen edge, keeping the orb in place.
+  const up = big && orbAnchor.y + H > wa.y + wa.height;
   const bounds = orbExpanded
-    ? { x: side === "left" ? orbAnchor.x - CARD : orbAnchor.x, y: orbAnchor.y, width: ORB + CARD, height: ORB }
+    ? { x: side === "left" ? orbAnchor.x - W : orbAnchor.x, y: up ? orbAnchor.y + ORB - H : orbAnchor.y,
+        width: ORB + W, height: H }
     : { x: orbAnchor.x, y: orbAnchor.y, width: ORB, height: ORB };
   orb.setBounds(bounds);
+  orb.webContents.send("orb:grow", up ? "up" : "down");
   if (side !== orbSide) {
     orbSide = side;
     orb.webContents.send("orb:side", side);
@@ -363,6 +372,7 @@ function refreshTray() {
     ] : []),
     { label: "Open Argus", ...(hotkeys.hub ? { accelerator: hotkeys.hub } : {}), click: openHub },
     { label: "Talk to Argus", ...(hotkeys.talk ? { accelerator: hotkeys.talk } : {}), click: talk },
+    { label: "Look at my screen", ...(hotkeys.snap ? { accelerator: hotkeys.snap } : {}), enabled: !setup.needsKey, click: snap },
     { label: "Morning briefing now", enabled: !setup.needsKey, click: () => runRoutine("Morning briefing") },
     { type: "separator" },
     { label: `Watching: ${root}`, enabled: false },
@@ -434,7 +444,9 @@ function createTray() {
 /* --------------------------------------------------------------- hotkeys */
 const HUB_KEYS = ["CommandOrControl+Alt+A", "CommandOrControl+Shift+A", "CommandOrControl+Alt+H"];
 const TALK_KEYS = ["CommandOrControl+Alt+Space", "CommandOrControl+Alt+J", "CommandOrControl+Shift+Space"];
-const hotkeys = { hub: null, talk: null };
+// Not Ctrl+S: that's Save in nearly every app, and a global key would steal it.
+const SNAP_KEYS = ["CommandOrControl+Alt+S", "CommandOrControl+Shift+Alt+S", "CommandOrControl+Alt+Q"];
+const hotkeys = { hub: null, talk: null, snap: null };
 
 function registerFirst(candidates, fn) {
   for (const accel of candidates) {
@@ -518,6 +530,58 @@ ipcMain.on("settings:changed", (e) => {
   for (const w of [hub, orb]) if (w && !w.isDestroyed() && w.webContents !== e.sender) w.webContents.send("settings:changed");
 });
 
+/* ------------------------------------------------------- look at my screen */
+let snapping = false;
+
+// Capture the screen the mouse is on (without the orb in it), hand it to the
+// core, and let the orb say "looking..." until the answer arrives.
+async function snap() {
+  if (snapping || setup.needsKey) return;
+  snapping = true;
+  const orbWasVisible = orb && !orb.isDestroyed() && orb.isVisible();
+  try {
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    if (orbWasVisible) {
+      orb.setOpacity(0);                       // out of the picture, without a flicker of layout
+      await new Promise((r) => setTimeout(r, 90));
+    }
+    const size = { width: Math.round(display.size.width * display.scaleFactor),
+                   height: Math.round(display.size.height * display.scaleFactor) };
+    const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: size });
+    const src = sources.find((s) => s.display_id === String(display.id)) || sources[0];
+    if (orbWasVisible) orb.setOpacity(1);
+    if (!src) throw new Error("no screen to capture");
+    const png = src.thumbnail.toPNG();
+    for (const w of [orb, hub]) if (w && !w.isDestroyed()) w.webContents.send("snap:started");
+    const res = await postBytes("/snap", png, "image/png");
+    if (!res.ok) {
+      const why = res.error === "busy" ? "Argus is still busy with something; press stop first." : res.error || "couldn't send it";
+      for (const w of [orb, hub]) if (w && !w.isDestroyed()) w.webContents.send("snap:failed", why);
+    }
+  } catch (e) {
+    console.error("[argus] snapshot failed:", e.message);
+    for (const w of [orb, hub]) if (w && !w.isDestroyed()) w.webContents.send("snap:failed", e.message);
+  } finally {
+    if (orbWasVisible && orb && !orb.isDestroyed()) orb.setOpacity(1);
+    snapping = false;
+  }
+}
+
+function postBytes(route, body, type) {
+  return new Promise((resolve) => {
+    const req = http.request(CORE + route, {
+      method: "POST", headers: { "content-type": type, "content-length": body.length }, timeout: 15000,
+    }, (res) => {
+      let out = "";
+      res.on("data", (c) => (out += c));
+      res.on("end", () => { try { resolve(JSON.parse(out)); } catch { resolve({ ok: false, error: "bad reply" }); } });
+    });
+    req.on("error", (e) => resolve({ ok: false, error: e.message }));
+    req.on("timeout", () => { req.destroy(); resolve({ ok: false, error: "the core didn't answer" }); });
+    req.end(body);
+  });
+}
+
 /* -------------------------------------------------------------- routines */
 function runRoutine(name) {
   const body = JSON.stringify({ name });
@@ -546,8 +610,9 @@ ipcMain.handle("app:open-key-file", openKeyFile);
 ipcMain.handle("app:go-live", goLive);
 ipcMain.on("hub:open", openHub);
 
-ipcMain.handle("orb:expand", (_e, expanded) => {
+ipcMain.handle("orb:expand", (_e, expanded, big) => {
   orbExpanded = Boolean(expanded);
+  orbBig = Boolean(big);
   applyOrbBounds();
   return orbSide;
 });
@@ -612,6 +677,7 @@ app.whenReady().then(async () => {
   // tell the UI which, so every hint shows the key that actually works.
   hotkeys.hub = registerFirst(HUB_KEYS, toggleHub);
   hotkeys.talk = registerFirst(TALK_KEYS, talk);
+  hotkeys.snap = registerFirst(SNAP_KEYS, snap);
   console.log("[argus] hotkeys: hub=%s talk=%s", hotkeys.hub, hotkeys.talk);
   refreshTray();
 
@@ -632,7 +698,7 @@ app.whenReady().then(async () => {
     global.__argus = {
       hub: () => hub, orb: () => orb,
       state: () => ({ orbAnchor, orbExpanded, orbSide, coreRoot, ownsCore: Boolean(core), needsKey: setup.needsKey }),
-      openHub, toggleHub, hasKey, envFile: ENV_FILE, tray: () => tray,
+      openHub, toggleHub, hasKey, envFile: ENV_FILE, tray: () => tray, snap, hotkeys: () => hotkeys,
     };
   }
 });

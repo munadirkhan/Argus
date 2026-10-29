@@ -9,7 +9,7 @@ not just while its tab is open.
 | **Floating orb** | Whenever the hub isn't in front, the hundred-eyed orb floats on top of everything — browser, file explorer, video, borderless games. Click it to open the hub. Drag it anywhere; it remembers where. |
 | **The orb speaks** | When Argus notices something while you're elsewhere, a card slides out beside the orb with the offer — **Proceed** runs it without leaving what you're doing. Replies and progress show there too. |
 | **Voice** | Push-to-talk, transcribed **on this machine** (faster-whisper). Your voice never leaves the computer. |
-| **Tray** | Open, talk, change the watched folder, **Full PC access**, toggle the orb, start with Windows, quit. |
+| **Tray** | Open, talk, **look at my screen**, change the watched folder, **Full PC access**, toggle the orb, start with Windows, quit. |
 | **Core** | Starts the Python core if one isn't already running, and stops it on quit. |
 
 ## Hotkeys (work from any app)
@@ -73,3 +73,11 @@ npm test            # drives the real app: orb, card, hub, tray lifecycle,
 ```
 
 The test needs port 7600 free (it starts its own core in fake-model mode).
+
+## Look at my screen
+
+**Ctrl+Alt+S** from any app (fallbacks: `Ctrl+Shift+Alt+S`, then `Ctrl+Alt+Q`)
+snapshots the screen the mouse is on and Argus answers what's on it with its
+vision model. The orb hides itself from the shot first. The answer appears in a
+scrollable panel beside the orb, is read aloud, can be copied, and lands in the
+chat so you can follow up.

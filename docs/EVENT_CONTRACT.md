@@ -160,3 +160,11 @@ ends with an assistant message `"Stopped."`.
 `POST /speak {"text", "voice"?}` returns `audio/wav` synthesized locally
 (Kokoro, else Windows SAPI); 503 if no engine. `GET /voice` reports the engine
 and voices. `/health` has `"speaker": "kokoro" | "sapi" | null`.
+
+### Look at my screen (additive, 2026-10-22)
+`POST /snap` with a PNG body (the screen the user's mouse is on) -> Argus answers
+what's on it with the vision model in a single call: a user `agent.message`
+carrying the screenshot as an attachment, one `agent.thinking`, a `usage`, then
+an assistant `agent.message`. 503/400 if no vision model or not a PNG; `?q=` adds
+something the user said with it. Loopback + origin checks apply, so a web page
+can't send one. The exchange joins the transcript, so follow-ups can refer to it.

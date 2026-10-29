@@ -546,11 +546,12 @@ function RoutineRow({ r, onChange, onRun, onCancel, isNew, ran }: { r: Routine; 
 }
 
 function KeysSection({ view }: { view: SettingsView | null }) {
-  const [keys, setKeys] = useState<{ hub: string | null; talk: string | null }>({ hub: null, talk: null });
+  const [keys, setKeys] = useState<{ hub: string | null; talk: string | null; snap?: string | null }>({ hub: null, talk: null });
   useEffect(() => void hotkeys().then(setKeys), []);
   const rows: [string, string][] = [
     ...(keys.hub ? [[keyLabel(keys.hub)!, "Show / hide the hub, from any app"] as [string, string]] : []),
     ...(keys.talk ? [[keyLabel(keys.talk)!, "Talk to Argus, from any app (press, speak, press again)"] as [string, string]] : []),
+    ...(keys.snap ? [[keyLabel(keys.snap)!, "Look at my screen: snapshot, and Argus answers what's on it"] as [string, string]] : []),
     ["Esc", "Stop Argus mid-task · dismiss what it noticed · close this"],
     ["Enter", "Accept what Argus noticed"],
     ["/", "Jump to the message box"],

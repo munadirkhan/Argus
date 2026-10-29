@@ -706,3 +706,12 @@ textarea.sx-input { resize: vertical; line-height: 1.5; }
   .sx-nav button.on { border-bottom-color: var(--gold); }
   .sx-content { padding: 18px 16px 30px; }
 }
+
+/* ---------------------------------------------------------------- answer panel (screen snapshots) */
+.orb-app.big.grow-down { align-items: flex-start; }
+.orb-app.big.grow-up { align-items: flex-end; }
+.orb-card.answer { width: 480px; height: 440px; display: flex; flex-direction: column; }
+.oc-answer { flex: 1; min-height: 0; overflow-y: auto; margin-top: 6px; padding-right: 6px; white-space: pre-wrap;
+  font-family: var(--font-voice); font-size: 16.5px; line-height: 1.38; color: var(--bone); user-select: text; }
+.oc-answer::-webkit-scrollbar { width: 6px; }
+.oc-answer::-webkit-scrollbar-thumb { background: rgba(var(--gold-rgb), .35); }

@@ -15,7 +15,7 @@ from . import events
 from .bus import EventBus
 from .models import BudgetExceeded, ModelRouter
 from .prompts import (PLANNER_SYSTEM, EXECUTOR_SYSTEM, WRITER_SYSTEM, SYNTH_SYSTEM,
-                      DOC_FORM, CODE_FORM, SELF_GUIDE, USER_STYLE)
+                      DOC_FORM, CODE_FORM, SELF_GUIDE, USER_STYLE, SCREEN_PROMPT)
 from . import memory, routines, settings, skills
 from .tools._workspace import places
 from .tools.registry import Registry
@@ -503,6 +503,39 @@ class Agent:
         await self._emit_usage(u)
         spoken = any("briefing" in s["name"].lower() for s in self.chosen_skills) or "briefing" in goal.lower()
         return brief((getattr(msg, "content", "") or "").strip(), 130 if spoken else 75) or "Done."
+
+    # --- the screen hotkey: one look, one answer ---------------------------
+    async def answer_screen(self, att, question=""):
+        """The user pressed the snapshot key: answer what's on their screen.
+
+        One call to the vision model -- no plan, no research -- so the answer
+        lands in seconds. It joins the conversation, so "explain that" works
+        as a follow-up (the planner can look at the same image again)."""
+        import base64
+        shown = question or "What's on my screen?"
+        await self.bus.emit(events.agent_message(self._nid("m"), "user", shown, attachments=[att]))
+        self.transcript.append({"role": "user", "content": "%s [screenshot: %s]" % (shown, att["path"])})
+        try:
+            if not getattr(self.router, "vision", None):
+                raise RuntimeError("no vision model in the Token Factory catalogue right now")
+            await self.bus.emit(events.agent_thinking("planner", self.router.vision[0], "Looking at your screen"))
+            with open(os.path.join(self.workspace, att["path"]), "rb") as f:
+                b64 = base64.b64encode(f.read()).decode()
+            ask = SCREEN_PROMPT + ("\nThe user also said: " + question if question else "")
+            ask += "\n\n" + memory.for_prompt() + "\n\n" + settings.persona_prompt()
+            answer, u = await self.router.see(b64, "image/png", ask, max_tokens=1200)
+            await self.bus.emit(events.usage("planner", u["model"], u["prompt_tokens"],
+                                             u["completion_tokens"], u["cost_usd"], u["cumulative_cost_usd"]))
+            answer = answer.strip() or "I couldn't make anything out on that screen."
+        except asyncio.CancelledError:
+            await self.bus.emit(events.agent_stopped())
+            answer = "Stopped."
+        except Exception as e:
+            await self.bus.emit(events.error("%s: %s" % (type(e).__name__, e), fatal=False))
+            answer = "I couldn't read your screen: %s" % e
+        await self.bus.emit(events.agent_message(self._nid("m"), "assistant", answer))
+        self.transcript.append({"role": "assistant", "content": answer})
+        return answer
 
     # --- the whole thing --------------------------------------------------
     async def run(self, goal, display=None, attachments=None):

@@ -20,6 +20,9 @@ const DRAG_THRESHOLD = 4;
 
 type Card =
   | { kind: "approval"; id: string; handoff: boolean; title: string; detail: string }
+  | { kind: "looking" }
+  | { kind: "snapfail"; error: string }
+  | { kind: "answer"; text: string }
   | { kind: "listening" }
   | { kind: "transcribing" }
   | { kind: "heard"; text: string }
@@ -37,6 +40,18 @@ export default function OrbApp() {
   const [mic, setMic] = useState<VoiceState>({ phase: "idle", level: 0, seconds: 0, error: null });
   const [reply, setReply] = useState<{ id: string; text: string; until: number } | null>(null);
   const [heard, setHeard] = useState<{ text: string; until: number } | null>(null);
+  // The snapshot key: "looking" until the answer lands, then a big answer panel.
+  const [snap, setSnap] = useState<{ phase: "looking" | "failed"; error?: string; until: number } | null>(null);
+  const [answer, setAnswer] = useState<{ text: string; until: number } | null>(null);
+  const [grow, setGrow] = useState<"up" | "down">("down");
+  const [copied, setCopied] = useState(false);
+  useEffect(() => desktop?.onOrbGrow?.(setGrow), []);
+  useEffect(() => desktop?.onSnap?.((e) => {
+    setAnswer(null);
+    setSnap(e.phase === "started"
+      ? { phase: "looking", until: Date.now() + 90_000 }
+      : { phase: "failed", error: e.error, until: Date.now() + 6000 });
+  }), []);
   const [, tick] = useState(0);
   const [talkKey, setTalkKey] = useState<string | null>(null);
   // On the desktop, the orb is the one that talks: it is always running,
@@ -91,6 +106,8 @@ export default function OrbApp() {
   // Whether this window is actually on screen. The desktop shell says so
   // explicitly: Electron reports a hidden window's document as "visible".
   const shown = useRef(!desktop);
+  const snapRef = useRef(snap);
+  snapRef.current = snap;
   useEffect(() => {
     if (!desktop) return;
     return desktop.onOrbVisible((v) => {
@@ -103,6 +120,13 @@ export default function OrbApp() {
     if (!liveSince.current || Date.now() - liveSince.current < 1500) return;
     // Only news if you were away: a reply that landed while the hub was in
     // front has already been read there.
+    // The answer to a snapshot gets the big panel, and stays until you close it.
+    if (snapRef.current?.phase === "looking") {
+      setSnap(null);
+      setAnswer({ text: lastReply.text.replace(/\*\*|__|^#+\s*/gm, ""), until: Date.now() + 10 * 60_000 });
+      setCopied(false);
+      return;
+    }
     if (!shown.current) return;
     setReply({ id: lastReply.id, text: plain(lastReply.text), until: Date.now() + REPLY_SECONDS * 1000 });
   }, [lastReply?.id]);
@@ -135,6 +159,9 @@ export default function OrbApp() {
     if (approval)
       return { kind: "approval", id: approval.id, handoff: approval.kind === "handoff",
                title: approval.title, detail: approval.detail };
+    if (snap?.phase === "looking" && snap.until > now) return { kind: "looking" };
+    if (snap?.phase === "failed" && snap.until > now) return { kind: "snapfail", error: snap.error || "" };
+    if (answer && answer.until > now) return { kind: "answer", text: answer.text };
     if (mic.phase === "recording") return { kind: "listening" };
     if (mic.phase === "transcribing") return { kind: "transcribing" };
     if (heard && heard.until > now) return { kind: "heard", text: heard.text };
@@ -143,12 +170,13 @@ export default function OrbApp() {
     if (busy) return { kind: "working", note, step };
     if (reply && reply.until > now) return { kind: "reply", text: reply.text };
     return null;
-  }, [approval, mic.phase, heard, prophecyId, obs, busy, note, step, reply, now]);
+  }, [approval, snap, answer, mic.phase, heard, prophecyId, obs, busy, note, step, reply, now]);
 
   const expanded = card !== null;
+  const big = card?.kind === "answer";
   useEffect(() => {
-    void desktop?.orbExpand(expanded).then(setSide);
-  }, [expanded]);
+    void desktop?.orbExpand(expanded, big).then(setSide);
+  }, [expanded, big]);
 
   // Click opens the hub; press-and-move drags the orb (the main process follows
   // the cursor, which keeps working when it leaves this tiny window).
@@ -175,7 +203,7 @@ export default function OrbApp() {
   const lit = mood !== "idle" || mic.phase === "recording" || card?.kind === "prophecy" || card?.kind === "approval";
 
   return (
-    <div className={`orb-app side-${side} ${expanded ? "expanded" : ""}`}>
+    <div className={`orb-app side-${side} ${expanded ? "expanded" : ""} ${big ? "big grow-" + grow : ""}`}>
       <div
         className={`orb-box mood-${mood} ${lit ? "lit" : ""} ${offline ? "offline" : ""}`}
         style={{ "--level": mic.level } as React.CSSProperties}
@@ -248,6 +276,30 @@ export default function OrbApp() {
                 <div className="oc-actions">
                   <button className="oc-stop" onClick={() => stop()}>STOP</button>
                   <button onClick={() => desktop?.openHub()}>OPEN</button>
+                </div>
+              </>
+            )}
+            {card.kind === "looking" && (
+              <>
+                <div className="oc-label">LOOKING AT YOUR SCREEN…</div>
+                <div className="oc-text dim">One look, one answer.</div>
+                <div className="oc-actions"><button className="oc-stop" onClick={() => { stop(); setSnap(null); }}>STOP</button></div>
+              </>
+            )}
+            {card.kind === "snapfail" && (
+              <>
+                <div className="oc-label">COULDN'T LOOK</div>
+                <div className="oc-text dim">{card.error}</div>
+              </>
+            )}
+            {card.kind === "answer" && (
+              <>
+                <div className="oc-label">WHAT I SEE</div>
+                <div className="oc-answer">{card.text}</div>
+                <div className="oc-actions">
+                  <button className="oc-go" onClick={() => { void navigator.clipboard.writeText(card.text); setCopied(true); }}>{copied ? "COPIED ✓" : "COPY"}</button>
+                  <button onClick={() => desktop?.openHub()}>OPEN</button>
+                  <button className="oc-x" onClick={() => { setAnswer(null); speaker.hush(); }} aria-label="Close">×</button>
                 </div>
               </>
             )}

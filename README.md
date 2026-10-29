@@ -232,6 +232,17 @@ Writing outside the watched folder asks first, and so does running a program.
 SSH and cloud keys, browser profiles, Windows credential stores, `.env` files
 and password vaults are refused in both modes.
 
+### Look at my screen
+
+Press **Ctrl+Alt+S** anywhere (or **Look at my screen** in the tray) and Argus
+takes a snapshot of whatever screen your mouse is on, reads it with its vision
+model, and answers what you're looking at -- a multiple-choice question, an
+error, code, a form, something to decide. The answer slides out beside the orb
+(and is spoken), you can copy it, and it joins the chat so "explain that" works
+as a follow-up. One look, one vision call, no browsing -- the answer lands in
+a few seconds. The orb removes itself from the shot first, so it's never in the
+picture. (Not Ctrl+S: that's Save everywhere, and a global key would steal it.)
+
 ### The Sanctum (settings)
 
 **SANCTUM** in the header (or **Ctrl+,**) opens every setting, applied as you
@@ -336,6 +347,7 @@ python scripts/test_stop_offline.py      # stop cuts a run off mid-call, mid-app
 python scripts/test_routines_offline.py  # schedules, the briefing, skills taught in chat
 python scripts/test_injection_offline.py # a document can't make a step act beyond what you asked
 python scripts/test_settings_offline.py  # the Sanctum: validated, saved, applied live
+python scripts/test_snap_offline.py      # look at my screen: one vision call, one answer
 python core/tools/tests/test_web_hands.py # Argus's browser on a real form: refusals, approvals
 cd desktop && npm test                    # the desktop app end to end (orb, card, voice, attach, no-key start)
 

@@ -222,7 +222,7 @@ class Session:
         return out
 
     async def _run_agent(self, text: str, display: str | None = None,
-                         attachments: list[dict] | None = None) -> None:
+                         attachments: list[dict] | None = None, screen: dict | None = None) -> None:
         if self._agent_lock.locked():
             await self.bus.emit(events.error(
                 "Still working on the previous request -- press stop to cut it off.", fatal=False))
@@ -232,7 +232,10 @@ class Session:
             was_enabled = self.watcher.enabled
             self.watcher.enabled = False          # do not interrupt itself
             try:
-                await self.agent.run(text, display=display, attachments=attachments)
+                if screen:
+                    await self.agent.answer_screen(screen, text)
+                else:
+                    await self.agent.run(text, display=display, attachments=attachments)
             except Exception as e:
                 await self.bus.emit(events.error(
                     "%s: %s" % (type(e).__name__, e), fatal=False))
@@ -476,6 +479,21 @@ async def put_routine(payload: dict) -> dict:
 @app.delete("/routine")
 async def delete_routine(name: str) -> dict:
     return {"ok": routines.remove(name)}
+
+
+@app.post("/snap")
+async def snap(request: Request) -> dict:
+    """The snapshot key: body is a PNG of the user's screen; Argus answers what's
+    on it. Optional ?q= is something the user said with it."""
+    data = await request.body()
+    if not data.startswith(b"\x89PNG") or len(data) > 25_000_000:
+        return {"ok": False, "error": "send a PNG screenshot"}
+    if session._agent_lock.locked():
+        return {"ok": False, "error": "busy"}
+    name = time.strftime("screen-%Y%m%d-%H%M%S.png")
+    att = attach_store.save(session.root, name, data)
+    asyncio.create_task(session._run_agent(str(request.query_params.get("q", ""))[:500], screen=att))
+    return {"ok": True, "path": att["path"]}
 
 
 @app.get("/routines")

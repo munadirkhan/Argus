@@ -129,6 +129,12 @@ try {
   console.log("\n=== leave the hub: the orb appears ===");
   await main(() => global.__argus.hub().minimize());
   check("orb shows when the hub is minimized", await until(() => main(() => global.__argus.orb().isVisible()), 4000));
+  // A reply from the message just sent can ride onto the orb as it appears;
+  // the user would glance and dismiss it. Clear it so we test the RESTING size.
+  for (const sel of [".orb-card.reply .oc-x", ".orb-card .oc-x"]) {
+    if (await orbPage.locator(sel).count()) { await orbPage.locator(sel).first().click().catch(() => {}); break; }
+  }
+  await until(() => main(() => global.__argus.orb().getBounds().width === 168), 3000);
   const st = await main(() => ({
     top: global.__argus.orb().isAlwaysOnTop(),
     b: global.__argus.orb().getBounds(),
@@ -177,6 +183,21 @@ try {
   check("orb takes over", await until(() => main(() => global.__argus.orb().isVisible()), 4000));
   check("core still running", (await health())?.ready === true);
   check("desktop owns this core", (await main(() => global.__argus.state())).ownsCore);
+
+  console.log("\n=== look at my screen (the snapshot key) ===");
+  check("the snapshot key registered", Boolean(await main(() => global.__argus.hotkeys().snap)));
+  await main(() => global.__argus.snap());
+  check("the screen went to the core",
+    await until(() => fs.readFileSync(coreLog, "utf8").includes('"POST /snap HTTP/1.1" 200'), 15000, 300));
+  check("the orb opens its big answer panel", await until(() => orbPage.locator(".orb-card.answer").count().then((n) => n > 0), 20000));
+  const big = await main(() => global.__argus.orb().getBounds());
+  check("the panel is the big size", big.width === 168 + 480 && big.height === 440, JSON.stringify(big));
+  check("the screenshot is in the chat, as your message", await hubPage.evaluate(() =>
+    window.__argusStore.getState().entries.some((e) => e.kind === "message" && e.role === "user" &&
+      (e.attachments || []).some((a) => a.name.startsWith("screen-")))));
+  await orbPage.locator(".orb-card.answer .oc-x").click();
+  check("closing it shrinks the orb back", await until(async () => (await main(() => global.__argus.orb().getBounds())).width === 168, 5000));
+
 } finally {
   await app.close();
 }
