@@ -233,6 +233,68 @@ const code = script("cd", (s) => {
 const research = (recorded as Timed[]).map((e) => ({ ...e }));
 const codeRecorded = (recordedCode as Timed[]).map((e) => ({ ...e }));
 
+/* ---------------------------------------------------------------- ASSISTANT */
+// The newer features in one session: talking to it, looking at the screen,
+// acting on the web behind an ALLOW card, and STOP.
+const ASSIST_ROOT = "C:/Users/demo/argus";
+const SHOT = { path: ".argus/attachments/screen-ci.png", name: "screen-ci.png", bytes: 412_880, kind: "image" as const };
+const assistant = script("as", (s) => {
+  s.at(0).emit({ type: "session.state", runtime: "local", status: "connected", cwd: ASSIST_ROOT, label: "simulated" })
+    .emit({ type: "fs.tree", root: ASSIST_ROOT, nodes: [
+      { path: `${ASSIST_ROOT}/about-me.md`, dir: false, bytes: 412 },
+      { path: `${ASSIST_ROOT}/resume.pdf`, dir: false, bytes: 88_120 },
+    ] })
+    .at(600).say("user", "m1", "Argus, what does your name stand for?")
+    .wait(300).think("planner", "Answering").wait(900).use("planner", 2100, 60)
+    .say("assistant", "m2", "A Really Good User System. And the name's older than the acronym: Argus Panoptes, the hundred-eyed giant who never slept. I just do it with a spending limit.")
+    .wait(3400).emit({ type: "agent.message", id: "as_m3", role: "user", text: "What's on my screen?", streaming: false, done: true, attachments: [SHOT] })
+    .wait(300).emit({ type: "agent.thinking", tier: "planner", model: "nvidia/Nemotron-3.5-Super-VL", note: "Looking at your screen" })
+    .wait(2000).use("planner", 1840, 210)
+    .say("assistant", "m4", "Your CI is failing on a peer-dependency clash, not your code. react-markdown 8 wants React 18 and you're on 19. Best fix: npm i react-markdown@10. Don't paper over it with --legacy-peer-deps.")
+    .wait(3600).say("user", "m5", "Apply to the junior engineer job at Example Co for me.")
+    .wait(300).think("planner", "Decomposing request").wait(1000).use("planner", 2600, 280)
+    .emit({ type: "agent.plan", id: "as_plan", steps: [
+      { id: "s1", title: "Find the resume and read about-me.md", status: "pending" },
+      { id: "s2", title: "Open the posting and fill in the application", status: "pending" },
+      { id: "s3", title: "Submit it, with your go-ahead", status: "pending" },
+    ] })
+    .wait(200).step("plan", "s1", "running").think("executor", "Calling tools")
+    .tool("t1", "find_files", { name: "resume", types: "pdf" }, 600, "1 match: resume.pdf")
+    .tool("t2", "read_file", { path: "about-me.md" }, 500, "about-me.md · 22 lines")
+    .use("executor", 2900, 70).step("plan", "s1", "done")
+    .step("plan", "s2", "running")
+    .emit({ type: "activity", source: "browser", app: "Argus · hands", title: "Apply: Junior Engineer, Example Co",
+      url: "jobs.example.com/junior-engineer", focus: true, lines: [{ text: "Opened jobs.example.com/junior-engineer", tone: "hl" }] })
+    .wait(1100).emit({ type: "activity", source: "browser", app: "Argus · hands", title: "Apply: Junior Engineer, Example Co",
+      url: "jobs.example.com/junior-engineer", focus: true, lines: [
+        { text: "Opened jobs.example.com/junior-engineer", tone: "hl" }, { text: "Typed Name, Email" },
+        { text: "Chose Work authorization: Yes" }, { text: "Attached resume.pdf" }, { text: "Typed Cover note" }] })
+    .wait(900).use("executor", 8800, 260).step("plan", "s2", "done").step("plan", "s3", "running")
+    .emit({ type: "agent.approval", id: "as_ap1", kind: "confirm", title: 'Click "Submit application" on jobs.example.com',
+      detail: "Name: (from about-me.md)\nResume: resume.pdf\nWork authorization: Yes\nStart date: May 2027",
+      url: "https://jobs.example.com/junior-engineer", timeout_s: 180 })
+    .wait(5200).emit({ type: "agent.approval.resolved", id: "as_ap1", outcome: "approved" })
+    .wait(500).emit({ type: "activity", source: "browser", app: "Argus · hands", title: "Application received",
+      url: "jobs.example.com/junior-engineer/thanks", focus: true, lines: [{ text: "Thanks, your application was received.", tone: "ok" }] })
+    .tool("t3", "write_file", { path: "job-applications.md" }, 150, "0.1 KB written to job-applications.md")
+    .emit({ type: "artifact.write", path: `${ASSIST_ROOT}/job-applications.md`, kind: "md", bytes: 128,
+      preview: "# Job applications\n\n| Date | Company | Role | Status |\n|---|---|---|---|\n| today | Example Co | Junior Engineer | Submitted |\n" })
+    .step("plan", "s3", "done")
+    .say("assistant", "m6", "Submitted, after your go-ahead. I logged it in job-applications.md.")
+    .wait(3200).say("user", "m7", "Do a deep dive report on the AI PC market.")
+    .wait(300).think("planner", "Decomposing request").wait(1000).use("planner", 2400, 340)
+    .emit({ type: "agent.plan", id: "as_plan2", steps: [
+      { id: "s1", title: "Survey the market and the main players", status: "pending" },
+      { id: "s2", title: "Read the latest filings", status: "pending" },
+      { id: "s3", title: "Write the report", status: "pending" },
+    ] })
+    .wait(200).step("plan2", "s1", "running").think("executor", "Searching")
+    .tool("t4", "tavily_search", { query: "AI PC market size 2026" }, 2400, "5 sources")
+    .wait(600).step("plan2", "s1", "failed")
+    .emit({ type: "agent.stopped", by: "user" })
+    .say("assistant", "m8", "Stopped.");
+});
+
 /* ------------------------------------------------------------------ MONTAGE */
 function chain(...parts: Timed[][]): Timed[] {
   const out: Timed[] = [];
@@ -255,9 +317,10 @@ function chain(...parts: Timed[][]): Timed[] {
 export const SCENARIOS: Record<string, Scenario> = {
   montage: {
     id: "montage", name: "Montage", kind: "simulated",
-    blurb: "Illustrative markets, then real recorded code and research runs.",
-    events: chain(markets, codeRecorded, research),
+    blurb: "Illustrative markets and assistant sessions, then real recorded code and research runs.",
+    events: chain(markets, assistant, codeRecorded, research),
   },
+  assistant: { id: "assistant", name: "Assistant", kind: "simulated", blurb: "Talking to it, reading your screen, applying behind an ALLOW card, and STOP.", events: assistant },
   markets: { id: "markets", name: "Markets", kind: "simulated", blurb: "Argus watches a chart and preps an earnings brief.", events: markets },
   code: { id: "code", name: "Code", kind: "simulated", blurb: "Argus catches a crash and patches it.", events: code },
   'code-recorded': { id: 'code-recorded', name: 'Code (recorded)', kind: 'recorded', blurb: 'A real crash, Proceed, automatic fix and clean rerun.', events: codeRecorded },
